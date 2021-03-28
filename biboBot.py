@@ -13,7 +13,7 @@ from telegram.ext import (
     MessageHandler,
     Filters
 )
-from telegram import File
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 
@@ -78,17 +78,24 @@ def addCompany(update, context):
         logger.error("Error Adding Company")
 
 def checkInOut(update, context):
-    #TODO
+    keyboard = [
+        InlineKeyboardButton("Book In", callback_data='in'),
+        InlineKeyboardButton("Book Out", callback_data='out')
+    ]
+    update.message.reply_text('Select Option', reply_markup=InlineKeyboardMarkup(keyboard))
+
+def authenticate(update, context):
     now = datetime.now()
     date = now.strftime("%d/%m/%Y")
     time = now.strftime("%H:%M:%S")
+    query = update.callback_query
 
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Pls type your rank and name")
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, addname))
+    query.answer()
 
-def authenticate(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Send your location pls")
-    dispatcher.add_handler(MessageHandler(Filters.location & ~Filters.command,authenticatedd))
+    query.edit_message_text(text=f"Selected option: {query.data}")
+
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Send your location")
+    dispatcher.add_handler(MessageHandler(Filters.location & ~Filters.command, authenticatedd))
 
 def authenticatedd(update, context):
     print("authenticatedist running")
@@ -119,11 +126,11 @@ def authenticatedd(update, context):
 
     #Changing radius from a point in camp to register too far or near
     if distance>5:
-        context.bot.send_message(chat_id=update.effective_chat.id, text='''Authentication failed, pls move
+        context.bot.send_message(chat_id=update.effective_chat.id, text='''Location check failed, pls move
         closer to camp and resend your location''')
         location(update,context)
     else:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Authentication succesful")
+        context.bot.send_message(chat_id=update.effective_chat.id, text="Location sent successfully")
         checkin(update,context)
 
     return 0
@@ -166,9 +173,10 @@ if __name__=="__main__":
     #adding handlers to telegram bot
     dispatcher=updater.dispatcher
     dispatcher.add_handler(CommandHandler("help", help))
-    dispatcher.add_handler(CommandHandler("join", addUser)))
+    dispatcher.add_handler(CommandHandler("join", addUser))
     dispatcher.add_handler(CommandHandler("create_company", addCompany))
-    dispatcher.add_handler(CommandHandler("checkInOut", checkInOut)))
+    dispatcher.add_handler(CommandHandler("checkInOut", checkInOut))
+    dispatcher.add_handler(CallbackQueryHandler(authenticate))
 
 
     #start telegram bot
