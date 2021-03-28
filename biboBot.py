@@ -22,9 +22,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 logger = logging.getLogger(__name__)
 
-def start(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text="I'm a bot, please talk to me!")
-
 def connect_database(file):
     #Connect to database
     conn = None
@@ -43,21 +40,20 @@ def execute_sql(conn, sql):
     except Error as e:
         logger.error(e)
 
-def checkInOut(update,context):
-    #TODO
-    now = datetime.now()
-    date = now.strftime("%d/%m/%Y")
-    time = now.strftime("%H:%M:%S")
+def help(update, context):
+    context.bot.send_message(
+        update.effective_chat.id,
+        '1) To receive join a company/battery /join.\n' +
+        '2) To create a company/battery /create_company.\n' +
+        '3) To check in or out /checkInOut'
+    )
 
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Pls type your rank and name")
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, addname))
-
-def addUser(update,context):
+def addUser(update, context):
     #TODO Instead of one line input, split inputs into mulitple bot prompts for user data
-    telegram_id = update.message.chat_id
+    telegram_id = update.message.chat_id #chat_id is the same as user_id when in single chat
     full_name = context.args[0]
     masked_nric = context.args[1]
-    company_id = context.args[2]
+    company_id = context.args[2] #TODO get company_id via company_name
 
     conn = connect_database(databasePath)
 
@@ -68,12 +64,33 @@ def addUser(update,context):
     else:
         logger.error("Error Adding User")
 
+def addCompany(update, context):
+    #TODO Make sure user is an admin
+    company_name = context.args[0]
 
-def authenticate(update,context):
+    conn = connect_database(databasePath)
+
+    if conn is not None:
+        sql = ('INSERT INTO company (company_name) VALUES (?)', [company_name])
+        execute_sql(conn, sql)
+        update.message.send_message(chat_id=update.effective_chat.id, text="Company to the database")
+    else:
+        logger.error("Error Adding Company")
+
+def checkInOut(update, context):
+    #TODO
+    now = datetime.now()
+    date = now.strftime("%d/%m/%Y")
+    time = now.strftime("%H:%M:%S")
+
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Pls type your rank and name")
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, addname))
+
+def authenticate(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text="Send your location pls")
     dispatcher.add_handler(MessageHandler(Filters.location & ~Filters.command,authenticatedd))
 
-def authenticatedd(update,context):
+def authenticatedd(update, context):
     print("authenticatedist running")
     local=update.message.location
     local1=str(local)
@@ -148,8 +165,9 @@ if __name__=="__main__":
 
     #adding handlers to telegram bot
     dispatcher=updater.dispatcher
-    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("help", help))
     dispatcher.add_handler(CommandHandler("join", addUser)))
+    dispatcher.add_handler(CommandHandler("create_company", addCompany))
     dispatcher.add_handler(CommandHandler("checkInOut", checkInOut)))
 
 
