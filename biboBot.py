@@ -37,6 +37,7 @@ def execute_sql(conn, sql):
     try:
         c = conn.cursor()
         c.execute(sql)
+        return c
     except Error as e:
         logger.error(e)
 
@@ -52,27 +53,44 @@ def addUser(update, context):
     #TODO Instead of one line input, split inputs into mulitple bot prompts for user data
     telegram_id = update.message.chat_id #chat_id is the same as user_id when in single chat
     full_name = context.args[0]
-    masked_nric = context.args[1]
-    company_id = context.args[2] #TODO get company_id via company_name
+    company_name = context.args[1]
 
     conn = connect_database(databasePath)
 
     if conn is not None:
-        sql = ('INSERT INTO user (telegram_id,full_name,masked_nric,company_id,isAdmin) VALUES (?,?,?,?,?)', [telegram_id, full_name, masked_nric, company_id])
+        sql = ('INSERT INTO user (telegram_id,full_name,company_id) VALUES (?,?, (SELECT id from company WHERE name = (?)))', [telegram_id, full_name, company_name])
         execute_sql(conn, sql)
         update.message.send_message(chat_id=update.effective_chat.id, text="You have been added to the database")
     else:
         logger.error("Error Adding User")
 
+def setAdmin(update, context):
+    if(context.args[0] == "password"):
+        telegram_id = update.message.chat_id
+        conn = connect_database(databasePath)
+
+        if conn is not None:
+            sql = ('UPDATE user SET isAdmin = 1 WHERE telegram_id = (?)', [telegram_id])
+            execute_sql(conn, sql)
+            update.message.send_message(chat_id=update.effective_chat.id, text="You are now an admin")
+        else:
+            logger.error("Error Changing to Admin")
+    else:
+        update.message.send_message(chat_id=update.effective_chat.id, text="Wrong password")
+    
 def addCompany(update, context):
-    #TODO Make sure user is an admin
+    conn = connect_database(databasePath)
+    telegram_id = update.message.chat_id    
     company_name = context.args[0]
 
-    conn = connect_database(databasePath)
-
+    
     if conn is not None:
-        sql = ('INSERT INTO company (company_name) VALUES (?)', [company_name])
-        execute_sql(conn, sql)
+        sql_1 = ('SELECT isAdmin FROM user WHERE telegram_id = (?)', [telegram_id])
+        if(execute_sql(conn, sql_1).fetchall() == 0):
+            update.message.send_message(chat_id=update.effective_chat.id, text="You are not an admin")
+            return
+        sql_2 = ('INSERT INTO company (company_name) VALUES (?)', [company_name])
+        execute_sql(conn, sql_2)
         update.message.send_message(chat_id=update.effective_chat.id, text="Company to the database")
     else:
         logger.error("Error Adding Company")
