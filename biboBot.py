@@ -10,6 +10,8 @@ from sqlite3 import Error
 from telegram.ext import (
     Updater,
     CommandHandler,
+    CallbackQueryHandler,
+    ConversationHandler,
     MessageHandler,
     Filters
 )
@@ -32,11 +34,12 @@ def connect_database(file):
         logger.error(e)
     return conn
 
-def execute_sql(conn, sql):
+def execute_sql(conn, sql, args=None):
     #Excutes sql queries
     try:
         c = conn.cursor()
-        c.execute(sql)
+        c.execute(sql, args)
+        conn.commit()
         return c
     except Error as e:
         logger.error(e)
@@ -50,17 +53,22 @@ def help(update, context):
     )
 
 def addUser(update, context):
-    #TODO Instead of one line input, split inputs into mulitple bot prompts for user data
-    telegram_id = update.message.chat_id #chat_id is the same as user_id when in single chat
-    full_name = context.args[0]
-    company_name = context.args[1]
+    try:
+        telegram_id = update.message.chat_id
+        full_name = context.args[0]
+        company_name = context.args[1]
+    except Exception as e:
+        logger.error(e)
+        context.bot.send_message(update.effective_chat.id, "/join FULL_NAME COMPANY_NAME")
+        return
 
     conn = connect_database(databasePath)
 
     if conn is not None:
-        sql = ('INSERT INTO user (telegram_id,full_name,company_id) VALUES (?,?, (SELECT id from company WHERE name = (?)))', [telegram_id, full_name, company_name])
-        execute_sql(conn, sql)
-        update.message.send_message(chat_id=update.effective_chat.id, text="You have been added to the database")
+        sql = 'INSERT INTO user (telegram_id,full_name,company_id) VALUES (?,?, (SELECT id from company WHERE name = (?)))'
+        args = (telegram_id, full_name, company_name)
+        execute_sql(conn, sql, args)
+        context.bot.send_message(update.effective_chat.id, "You have been added to the database")
     else:
         logger.error("Error Adding User")
 
@@ -70,28 +78,30 @@ def setAdmin(update, context):
         conn = connect_database(databasePath)
 
         if conn is not None:
-            sql = ('UPDATE user SET isAdmin = 1 WHERE telegram_id = (?)', [telegram_id])
-            execute_sql(conn, sql)
-            update.message.send_message(chat_id=update.effective_chat.id, text="You are now an admin")
+            sql = 'UPDATE user SET isAdmin = 1 WHERE telegram_id = (?)'
+            args = (telegram_id)
+            execute_sql(conn, sql, args)
+            context.bot.send_message(update.effective_chat.id, "You are now an admin")
         else:
             logger.error("Error Changing to Admin")
     else:
-        update.message.send_message(chat_id=update.effective_chat.id, text="Wrong password")
-    
+        context.bot.send_message(update.effective_chat.id, "Wrong password")
+
 def addCompany(update, context):
     conn = connect_database(databasePath)
-    telegram_id = update.message.chat_id    
+    telegram_id = update.message.chat_id
     company_name = context.args[0]
 
-    
     if conn is not None:
-        sql_1 = ('SELECT isAdmin FROM user WHERE telegram_id = (?)', [telegram_id])
-        if(execute_sql(conn, sql_1).fetchall() == 0):
-            update.message.send_message(chat_id=update.effective_chat.id, text="You are not an admin")
+        sql_1 = 'SELECT isAdmin FROM user WHERE telegram_id = (?)'
+        args_1 = (telegram_id)
+        if(execute_sql(conn, sql_1, args_1).fetchall() == 0):
+            context.bot.send_message(update.effective_chat.id, "You are not an admin")
             return
-        sql_2 = ('INSERT INTO company (company_name) VALUES (?)', [company_name])
-        execute_sql(conn, sql_2)
-        update.message.send_message(chat_id=update.effective_chat.id, text="Company to the database")
+        sql_2 = 'INSERT INTO company (company_name) VALUES (?)'
+        args_2 = (company_name)
+        execute_sql(conn, sql_2, args_2)
+        context.bot.send_message(update.effective_chat.id, "Added company to the database")
     else:
         logger.error("Error Adding Company")
 
@@ -124,7 +134,6 @@ def authenticatedd(update, context):
         if number in "0123456789. ":
             local2= local2 + number
     places=local2.split(" ")
-
 
     #Calculation for distance between two points
     R = 6373.0
