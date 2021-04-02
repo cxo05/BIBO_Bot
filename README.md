@@ -20,4 +20,6 @@ echo bot_key=_INSERTKEYHERE_ > .env
 pip install -r requirements.txt
 #Running the bot
 py biboBot.py
+#Autoreloading during development
+./autoreload py biboBot.py
 ```

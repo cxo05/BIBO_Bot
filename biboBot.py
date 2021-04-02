@@ -15,14 +15,16 @@ from telegram.ext import (
     MessageHandler,
     Filters
 )
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import ReplyKeyboardMarkup
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 
 #Enable logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 logger = logging.getLogger(__name__)
+
+BIBO, LOCATION = range(2)
 
 def connect_database(file):
     #Connect to database
@@ -47,8 +49,10 @@ def execute_sql(conn, sql, args=None):
 def help(update, context):
     context.bot.send_message(
         update.effective_chat.id,
-        '1) To receive join a company/battery /join.\n' +
-        '2) To create a company/battery /create_company.\n' +
+        '1) To join a company/battery.\n' +
+        '   /join FULL_NAME COMPANY_NAME\n' +
+        '2) To create a company/battery.\n' +
+        '   /create_company COMPANY_NAME\n' +
         '3) To check in or out /checkInOut'
     )
 
@@ -79,7 +83,7 @@ def setAdmin(update, context):
 
         if conn is not None:
             sql = 'UPDATE user SET isAdmin = 1 WHERE telegram_id = (?)'
-            args = (telegram_id)
+            args = (telegram_id,)
             execute_sql(conn, sql, args)
             context.bot.send_message(update.effective_chat.id, "You are now an admin")
         else:
@@ -94,40 +98,39 @@ def addCompany(update, context):
 
     if conn is not None:
         sql_1 = 'SELECT isAdmin FROM user WHERE telegram_id = (?)'
-        args_1 = (telegram_id)
+        args_1 = (telegram_id,)
         if(execute_sql(conn, sql_1, args_1).fetchall() == 0):
             context.bot.send_message(update.effective_chat.id, "You are not an admin")
             return
         sql_2 = 'INSERT INTO company (company_name) VALUES (?)'
-        args_2 = (company_name)
+        args_2 = (company_name,)
         execute_sql(conn, sql_2, args_2)
         context.bot.send_message(update.effective_chat.id, "Added company to the database")
     else:
         logger.error("Error Adding Company")
 
 def checkInOut(update, context):
-    keyboard = [
-        InlineKeyboardButton("Book In", callback_data='in'),
-        InlineKeyboardButton("Book Out", callback_data='out')
-    ]
-    update.message.reply_text('Select Option', reply_markup=InlineKeyboardMarkup(keyboard))
+    keyboard = [['Book In', 'Book Out']]
+    update.message.reply_text('Select Option:', reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
+    return BIBO
 
 def authenticate(update, context):
     now = datetime.now()
     date = now.strftime("%d/%m/%Y")
     time = now.strftime("%H:%M:%S")
-    query = update.callback_query
 
-    query.answer()
-
-    query.edit_message_text(text=f"Selected option: {query.data}")
-
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Send your location")
-    dispatcher.add_handler(MessageHandler(Filters.location & ~Filters.command, authenticatedd))
+    if(update.message.text == "Book In"):
+        update.message.reply_text("Send your location")
+        return LOCATION
+    else:
+        update.message.reply_text("Book Out") #TODO Book out
 
 def authenticatedd(update, context):
-    print("authenticatedist running")
-    local=update.message.location
+    #asd
+    local = update.message.location
+    logger.info(
+        "Location: %f / %f", local.latitude, local.longitude
+    )
     local1=str(local)
     local2=""
     for number in local1:
@@ -162,6 +165,9 @@ def authenticatedd(update, context):
 
     return 0
 
+def cancel(update, context):
+    update.message.reply_text('BIBO operation canceled')
+    return ConversationHandler.END
 
 if __name__=="__main__":
     sql_create_company_table = """ CREATE TABLE IF NOT EXISTS company (
@@ -190,9 +196,9 @@ if __name__=="__main__":
     conn = connect_database(databasePath)
 
     if conn is not None:
-        execute_sql(conn, sql_create_company_table)
-        execute_sql(conn, sql_create_user_table)
-        execute_sql(conn, sql_create_timesheet_table)
+        execute_sql(conn, sql_create_company_table, ())
+        execute_sql(conn, sql_create_user_table, ())
+        execute_sql(conn, sql_create_timesheet_table, ())
 
     #define telegram bot
     updater = Updater(token=botKey, use_context=True)
@@ -201,10 +207,19 @@ if __name__=="__main__":
     dispatcher=updater.dispatcher
     dispatcher.add_handler(CommandHandler("help", help))
     dispatcher.add_handler(CommandHandler("join", addUser))
+    dispatcher.add_handler(CommandHandler("setAdmin", setAdmin))
     dispatcher.add_handler(CommandHandler("create_company", addCompany))
-    dispatcher.add_handler(CommandHandler("checkInOut", checkInOut))
-    dispatcher.add_handler(CallbackQueryHandler(authenticate))
-
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("checkInOut", checkInOut)],
+        states={
+            BIBO: [MessageHandler(Filters.regex('^(Book In|Book Out)$'), authenticate)],
+            LOCATION: [
+                MessageHandler(Filters.location, authenticatedd),
+            ]
+        },
+        fallbacks=[MessageHandler(Filters.text & ~Filters.command, cancel)]
+    )
+    dispatcher.add_handler(conv_handler)
 
     #start telegram bot
     updater.start_polling()
