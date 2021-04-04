@@ -148,8 +148,8 @@ def authenticateLocation(update, context):
     else:
         update.message.reply_text("Location valid")
         #status is a bool (0 = Book in, 1 = Book out)
-        sql = 'INSERT INTO timesheet (telegram_id, time, status) VALUES (?,?,?)'
-        args = (update.message.chat_id, datetime.now(), 0)
+        sql = 'INSERT INTO timesheet (telegram_id, time_in) VALUES (?,?)'
+        args = (update.message.chat_id, datetime.now())
         execute_sql(conn, sql, args)
         update.message.reply_text("You have booked in")
 
@@ -159,8 +159,8 @@ def bookIn(update, context):
 
 def bookOut(update, context):
     #status is a bool (0 = Book in, 1 = Book out)
-    sql = 'INSERT INTO timesheet (telegram_id, time, status) VALUES (?,?,?)'
-    args = (update.message.chat_id, datetime.now(), 1)
+    sql = 'UPDATE timesheet SET time_out = (?) WHERE telegram_id = (?) AND time_out = NULL'
+    args = (datetime.now(), update.message.chat_id)
     execute_sql(conn, sql, args)
     update.message.reply_text("You have booked out")
 
@@ -186,8 +186,8 @@ if __name__=="__main__":
     sql_create_timesheet_table = """CREATE TABLE IF NOT EXISTS timesheet (
                                     id integer PRIMARY KEY AUTOINCREMENT,
                                     telegram_id integer NOT NULL,
-                                    time text NOT NULL,
-                                    status integer NOT NULL,
+                                    time_in text,
+                                    time_out text,
                                     FOREIGN KEY (telegram_id) REFERENCES user (telegram_id)
                                 );"""
 
