@@ -19,7 +19,6 @@ from telegram import ReplyKeyboardMarkup
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 
-#Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -109,24 +108,12 @@ def addCompany(update, context):
     else:
         logger.error("Error Adding Company")
 
-def checkInOut(update, context):
+def InOutButton(update, context):
     keyboard = [['Book In', 'Book Out']]
     update.message.reply_text('Select Option:', reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
     return BIBO
 
-def authenticate(update, context):
-    now = datetime.now()
-    date = now.strftime("%d/%m/%Y")
-    time = now.strftime("%H:%M:%S")
-
-    if(update.message.text == "Book In"):
-        update.message.reply_text("Send your location")
-        return LOCATION
-    else:
-        update.message.reply_text("Book Out") #TODO Book out
-
-def authenticatedd(update, context):
-    #asd
+def authenticateLocation(update, context):
     local = update.message.location
     logger.info(
         "Location: %f / %f", local.latitude, local.longitude
@@ -156,14 +143,26 @@ def authenticatedd(update, context):
 
     #Changing radius from a point in camp to register too far or near
     if distance>5:
-        context.bot.send_message(chat_id=update.effective_chat.id, text='''Location check failed, pls move
-        closer to camp and resend your location''')
-        location(update,context)
+        update.message.reply_text("Too far from camp, move closer and resend your location")
+        return LOCATION
     else:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Location sent successfully")
-        checkin(update,context)
+        update.message.reply_text("Location valid")
+        #status is a bool (0 = Book in, 1 = Book out)
+        sql = 'INSERT INTO timesheet (telegram_id, time, status) VALUES (?,?,?)'
+        args = (update.message.chat_id, datetime.now(), 0)
+        execute_sql(conn, sql, args)
+        update.message.reply_text("You have booked in")
 
-    return 0
+def bookIn(update, context):
+    update.message.reply_text("Send your location")
+    return LOCATION
+
+def bookOut(update, context):
+    #status is a bool (0 = Book in, 1 = Book out)
+    sql = 'INSERT INTO timesheet (telegram_id, time, status) VALUES (?,?,?)'
+    args = (update.message.chat_id, datetime.now(), 1)
+    execute_sql(conn, sql, args)
+    update.message.reply_text("You have booked out")
 
 def cancel(update, context):
     update.message.reply_text('BIBO operation canceled')
@@ -210,11 +209,14 @@ if __name__=="__main__":
     dispatcher.add_handler(CommandHandler("setAdmin", setAdmin))
     dispatcher.add_handler(CommandHandler("create_company", addCompany))
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("checkInOut", checkInOut)],
+        entry_points=[CommandHandler("bookInOut", InOutButton)],
         states={
-            BIBO: [MessageHandler(Filters.regex('^(Book In|Book Out)$'), authenticate)],
+            BIBO: [
+                MessageHandler(Filters.regex('^(Book In)$'), bookIn),
+                MessageHandler(Filters.regex('^(Book Out)$'), bookOut),
+            ],
             LOCATION: [
-                MessageHandler(Filters.location, authenticatedd),
+                MessageHandler(Filters.location, authenticateLocation),
             ]
         },
         fallbacks=[MessageHandler(Filters.text & ~Filters.command, cancel)]

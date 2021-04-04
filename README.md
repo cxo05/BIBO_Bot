@@ -14,8 +14,9 @@ Requirements :
 #Clone project
 git clone https://github.com/2x0c0h1/BIBO_Bot.git
 cd BIBO_Bot
-#Create .env file and add key
-echo bot_key=_INSERTKEYHERE_ > .env
+#Create .env file and add keys
+echo bot_key=_INSERTKEYHERE_ >> .env
+echo databasePath=bibo.db >> .env
 #Install packages
 pip install -r requirements.txt
 #Running the bot
