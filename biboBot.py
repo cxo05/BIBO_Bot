@@ -159,7 +159,7 @@ def bookIn(update, context):
 
 def bookOut(update, context):
     #status is a bool (0 = Book in, 1 = Book out)
-    sql = 'UPDATE timesheet SET time_out = (?) WHERE telegram_id = (?) AND time_out = NULL'
+    sql = 'UPDATE timesheet SET time_out = (?) WHERE telegram_id = (?) AND time_out = NULL ORDER BY datetime(time_in) DESC LIMIT 1'
     args = (datetime.now(), update.message.chat_id)
     execute_sql(conn, sql, args)
     update.message.reply_text("You have booked out")
@@ -186,7 +186,7 @@ if __name__=="__main__":
     sql_create_timesheet_table = """CREATE TABLE IF NOT EXISTS timesheet (
                                     id integer PRIMARY KEY AUTOINCREMENT,
                                     telegram_id integer NOT NULL,
-                                    time_in text,
+                                    time_in text NOT NULL,
                                     time_out text,
                                     FOREIGN KEY (telegram_id) REFERENCES user (telegram_id)
                                 );"""
