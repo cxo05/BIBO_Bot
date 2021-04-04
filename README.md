@@ -21,6 +21,4 @@ echo databasePath=bibo.db >> .env
 pip install -r requirements.txt
 #Running the bot
 py biboBot.py
-#Autoreloading during development
-./autoreload py biboBot.py
 ```
