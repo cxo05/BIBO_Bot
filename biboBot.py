@@ -53,10 +53,20 @@ def help(update, context):
         '2) To create a company/battery.\n' +
         '   /create_company\n' +
         '3) To book in or out\n' +
-        '   /bookInOut'
+        '   /bookInOut\n' +
+        '4) Show users\n' +
+        '   /getUsers\n'
     )
 
 def saveUserName(update, context):
+    conn = connect_database(databasePath)
+    telegram_id = update.message.chat_id
+    sql = 'SELECT EXISTS (SELECT 1 FROM user WHERE telegram_id = (?))'
+    args = (telegram_id,)
+    [row] = execute_sql(conn, sql, args).fetchone()
+    if row:
+        update.message.reply_text("You are already in the database")
+        return ConversationHandler.END
     update.message.reply_text("Enter your name")
     return SAVE_NAME
 
@@ -70,8 +80,12 @@ def addUser(update, context):
     telegram_id = update.message.chat_id
     sql = 'INSERT INTO user (telegram_id,full_name,company_id) VALUES (?,?, (SELECT id from company WHERE name = (?)))'
     args = (telegram_id, context.user_data["name"], update.message.text)
-    execute_sql(conn, sql, args)
-    update.message.reply_text(context.user_data["name"] + " has been added to " + update.message.text)
+    try:
+        execute_sql(conn, sql, args)
+    except Error as e:
+        update.message.reply_text("Company does not exist")
+    else:
+        update.message.reply_text(context.user_data["name"] + " has been added to " + update.message.text)
     return ConversationHandler.END
 
 def setAdmin(update, context):
@@ -102,8 +116,12 @@ def addCompany(update,context):
     company_name = update.message.text
     sql = 'INSERT INTO company (name) VALUES (?)'
     args = (company_name,)
-    execute_sql(conn, sql, args)
-    update.message.reply_text("Added " + company_name + " to the database")
+    try:
+        execute_sql(conn, sql, args)
+    except Error as e:
+        update.message.reply_text("Error")
+    else:
+        update.message.reply_text("Added " + company_name + " to the database")
     return ConversationHandler.END
 
 def InOutButton(update, context):
@@ -164,21 +182,32 @@ def bookOut(update, context):
     execute_sql(conn, sql, args)
     update.message.reply_text("You have booked out")
 
+def getUsers(update, context):
+    conn = connect_database(databasePath)
+    sql = 'SELECT full_name, company_id FROM user'
+    results = execute_sql(conn, sql, ()).fetchall()
+    update.message.reply_text("Total users are:  " + str(len(results)) + "\n")
+    if(results):
+        text = ""
+        for row in results:
+            text = str(row[0]) + " " + str(row[1]) + "\n"
+        update.message.reply_text(text)
+
 def cancel(update, context):
     update.message.reply_text('Current operation canceled')
     return ConversationHandler.END
 
 if __name__=="__main__":
-    sql_create_company_table = """ CREATE TABLE IF NOT EXISTS company (
+    sql_create_company_table = """CREATE TABLE IF NOT EXISTS company (
                                         id integer PRIMARY KEY AUTOINCREMENT,
-                                        name text NOT NULL
+                                        name text UNIQUE NOT NULL
                                     ); """
 
     sql_create_user_table = """CREATE TABLE IF NOT EXISTS user (
                                     telegram_id integer PRIMARY KEY,
                                     full_name text NOT NULL,
                                     isAdmin integer DEFAULT 0,
-                                    company_id integer,
+                                    company_id integer NOT NULL,
                                     FOREIGN KEY (company_id) REFERENCES company (id)
                                 );"""
 
@@ -190,6 +219,10 @@ if __name__=="__main__":
                                     FOREIGN KEY (telegram_id) REFERENCES user (telegram_id)
                                 );"""
 
+    sql_create_default_company = """INSERT INTO company (name) VALUES (
+                                    "Bravo"
+                                    );"""
+
     #Connect to database
     conn = connect_database(databasePath)
 
@@ -197,6 +230,7 @@ if __name__=="__main__":
         execute_sql(conn, sql_create_company_table, ())
         execute_sql(conn, sql_create_user_table, ())
         execute_sql(conn, sql_create_timesheet_table, ())
+        execute_sql(conn, sql_create_default_company, ())
 
     #define telegram bot
     updater = Updater(token=botKey, use_context=True)
@@ -206,6 +240,7 @@ if __name__=="__main__":
     dispatcher.add_handler(CommandHandler("start", help))
     dispatcher.add_handler(CommandHandler("help", help))
     dispatcher.add_handler(CommandHandler("setAdmin", setAdmin))
+    dispatcher.add_handler(CommandHandler("getUsers", getUsers))
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("create_company", addCompanyMsg),
