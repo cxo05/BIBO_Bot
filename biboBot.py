@@ -23,7 +23,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 logger = logging.getLogger(__name__)
 
-BIBO, LOCATION = range(2)
+SAVE_NAME, SAVE_COMPANY, COMPANY_NAME, BIBO, LOCATION = range(5)
 
 def connect_database(file):
     #Connect to database
@@ -49,64 +49,62 @@ def help(update, context):
     context.bot.send_message(
         update.effective_chat.id,
         '1) To join a company/battery.\n' +
-        '   /join FULL_NAME COMPANY_NAME\n' +
+        '   /join\n' +
         '2) To create a company/battery.\n' +
-        '   /create_company COMPANY_NAME\n' +
-        '3) To check in or out /checkInOut'
+        '   /create_company\n' +
+        '3) To book in or out\n' +
+        '   /bookInOut'
     )
 
+def saveUserName(update, context):
+    update.message.reply_text("Enter your name")
+    return SAVE_NAME
+
+def saveUserCompany(update, context):
+    context.user_data["name"] = update.message.text
+    update.message.reply_text("Enter company/battery name")
+    return SAVE_COMPANY
+
 def addUser(update, context):
-    try:
-        telegram_id = update.message.chat_id
-        full_name = context.args[0]
-        company_name = context.args[1]
-    except Exception as e:
-        logger.error(e)
-        context.bot.send_message(update.effective_chat.id, "/join FULL_NAME COMPANY_NAME")
-        return
-
     conn = connect_database(databasePath)
-
-    if conn is not None:
-        sql = 'INSERT INTO user (telegram_id,full_name,company_id) VALUES (?,?, (SELECT id from company WHERE name = (?)))'
-        args = (telegram_id, full_name, company_name)
-        execute_sql(conn, sql, args)
-        context.bot.send_message(update.effective_chat.id, "You have been added to the database")
-    else:
-        logger.error("Error Adding User")
+    telegram_id = update.message.chat_id
+    sql = 'INSERT INTO user (telegram_id,full_name,company_id) VALUES (?,?, (SELECT id from company WHERE name = (?)))'
+    args = (telegram_id, context.user_data["name"], update.message.text)
+    execute_sql(conn, sql, args)
+    update.message.reply_text(context.user_data["name"] + " has been added to " + update.message.text)
+    return ConversationHandler.END
 
 def setAdmin(update, context):
     if(context.args[0] == "password"):
         telegram_id = update.message.chat_id
         conn = connect_database(databasePath)
-
-        if conn is not None:
-            sql = 'UPDATE user SET isAdmin = 1 WHERE telegram_id = (?)'
-            args = (telegram_id,)
-            execute_sql(conn, sql, args)
-            context.bot.send_message(update.effective_chat.id, "You are now an admin")
-        else:
-            logger.error("Error Changing to Admin")
+        sql = 'UPDATE user SET isAdmin = 1 WHERE telegram_id = (?)'
+        args = (telegram_id,)
+        execute_sql(conn, sql, args)
+        update.message.reply_text("You are now an admin")
     else:
-        context.bot.send_message(update.effective_chat.id, "Wrong password")
+        update.message.reply_text("Wrong password")
 
-def addCompany(update, context):
+def addCompanyMsg(update, context):
     conn = connect_database(databasePath)
-    telegram_id = update.message.chat_id
-    company_name = context.args[0]
-
-    if conn is not None:
-        sql_1 = 'SELECT isAdmin FROM user WHERE telegram_id = (?)'
-        args_1 = (telegram_id,)
-        if(execute_sql(conn, sql_1, args_1).fetchall() == 0):
-            context.bot.send_message(update.effective_chat.id, "You are not an admin")
-            return
-        sql_2 = 'INSERT INTO company (company_name) VALUES (?)'
-        args_2 = (company_name,)
-        execute_sql(conn, sql_2, args_2)
-        context.bot.send_message(update.effective_chat.id, "Added company to the database")
+    sql = 'SELECT isAdmin FROM user WHERE telegram_id = (?)'
+    args = (update.message.chat_id,)
+    asd = execute_sql(conn, sql, args).fetchone()
+    if(asd[0] == 1):
+        update.message.reply_text("Enter company/battery name")
+        return COMPANY_NAME
     else:
-        logger.error("Error Adding Company")
+        update.message.reply_text("You are not an admin")
+        return ConversationHandler.END
+
+def addCompany(update,context):
+    conn = connect_database(databasePath)
+    company_name = update.message.text
+    sql = 'INSERT INTO company (name) VALUES (?)'
+    args = (company_name,)
+    execute_sql(conn, sql, args)
+    update.message.reply_text("Added " + company_name + " to the database")
+    return ConversationHandler.END
 
 def InOutButton(update, context):
     keyboard = [['Book In', 'Book Out']]
@@ -146,6 +144,7 @@ def authenticateLocation(update, context):
         update.message.reply_text("Too far from camp, move closer and resend your location")
         return LOCATION
     else:
+        conn = connect_database(databasePath)
         update.message.reply_text("Location valid")
         #status is a bool (0 = Book in, 1 = Book out)
         sql = 'INSERT INTO timesheet (telegram_id, time_in) VALUES (?,?)'
@@ -158,6 +157,7 @@ def bookIn(update, context):
     return LOCATION
 
 def bookOut(update, context):
+    conn = connect_database(databasePath)
     #status is a bool (0 = Book in, 1 = Book out)
     sql = 'UPDATE timesheet SET time_out = (?) WHERE telegram_id = (?) AND time_out = NULL ORDER BY datetime(time_in) DESC LIMIT 1'
     args = (datetime.now(), update.message.chat_id)
@@ -165,7 +165,7 @@ def bookOut(update, context):
     update.message.reply_text("You have booked out")
 
 def cancel(update, context):
-    update.message.reply_text('BIBO operation canceled')
+    update.message.reply_text('Current operation canceled')
     return ConversationHandler.END
 
 if __name__=="__main__":
@@ -177,9 +177,8 @@ if __name__=="__main__":
     sql_create_user_table = """CREATE TABLE IF NOT EXISTS user (
                                     telegram_id integer PRIMARY KEY,
                                     full_name text NOT NULL,
-                                    masked_nric text NOT NULL,
                                     isAdmin integer DEFAULT 0,
-                                    company_id integer NOT NULL,
+                                    company_id integer,
                                     FOREIGN KEY (company_id) REFERENCES company (id)
                                 );"""
 
@@ -204,13 +203,25 @@ if __name__=="__main__":
 
     #adding handlers to telegram bot
     dispatcher=updater.dispatcher
+    dispatcher.add_handler(CommandHandler("start", help))
     dispatcher.add_handler(CommandHandler("help", help))
-    dispatcher.add_handler(CommandHandler("join", addUser))
     dispatcher.add_handler(CommandHandler("setAdmin", setAdmin))
-    dispatcher.add_handler(CommandHandler("create_company", addCompany))
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("bookInOut", InOutButton)],
+        entry_points=[
+            CommandHandler("create_company", addCompanyMsg),
+            CommandHandler("bookInOut", InOutButton),
+            CommandHandler("join", saveUserName),
+        ],
         states={
+            SAVE_NAME:[
+                MessageHandler(Filters.text & ~Filters.command, saveUserCompany),
+            ],
+            SAVE_COMPANY:[
+                MessageHandler(Filters.text & ~Filters.command, addUser),
+            ],
+            COMPANY_NAME: [
+                MessageHandler(Filters.text & ~Filters.command, addCompany),
+            ],
             BIBO: [
                 MessageHandler(Filters.regex('^(Book In)$'), bookIn),
                 MessageHandler(Filters.regex('^(Book Out)$'), bookOut),
@@ -219,7 +230,10 @@ if __name__=="__main__":
                 MessageHandler(Filters.location, authenticateLocation),
             ]
         },
-        fallbacks=[MessageHandler(Filters.text & ~Filters.command, cancel)]
+        fallbacks=[
+            MessageHandler(Filters.text & ~Filters.command, cancel),
+        ],
+        allow_reentry=True
     )
     dispatcher.add_handler(conv_handler)
 
