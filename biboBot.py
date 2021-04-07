@@ -23,7 +23,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 logger = logging.getLogger(__name__)
 
-SAVE_NAME, SAVE_COMPANY, COMPANY_NAME, BIBO, LOCATION = range(5)
+SAVE_NAME, SAVE_COMPANY, COMPANY_NAME, BIBO, LOCATION, DATE = range(6)
 
 def connect_database(file):
     #Connect to database
@@ -230,6 +230,27 @@ def viewUserHistory(update, context):
             text = text + "In: " + datetime.fromisoformat(row[0]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[1], str) else "\n\n")
         update.message.reply_text(text)
 
+def viewInCamp(update, context):
+    #View In camp personnel
+
+def getDate(update, context):
+    update.message.reply_text("Enter a date DDMMYYYY:")
+    #TODO verify date
+    return DATE
+    
+def viewDateHistory(update, context):
+    date = datetime.strptime(update.message.text, "DDMMYYYY")
+    conn = connect_database(databasePath)
+    sql = 'SELECT name FROM user JOIN SELECT time_in, time_out FROM timesheet ' #TODO Compare date
+    args = (date,)
+    results = execute_sql(conn, sql, args).fetchall()
+    #TODO Change formating to include users
+    if(results):
+        text = ""
+        for row in results:
+            text = text + "In: " + datetime.fromisoformat(row[0]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[1], str) else "\n\n")
+        update.message.reply_text(text)
+
 def cancel(update, context):
     update.message.reply_text('Current operation canceled')
     return ConversationHandler.END
@@ -284,6 +305,7 @@ if __name__=="__main__":
             CommandHandler("create_company", addCompanyMsg),
             CommandHandler("bookInOut", InOutButton),
             CommandHandler("join", saveUserName),
+            CommandHandler("getDateHistory", getDate),
         ],
         states={
             SAVE_NAME:[
@@ -302,6 +324,9 @@ if __name__=="__main__":
             LOCATION: [
                 MessageHandler(Filters.location, authenticateLocation),
                 MessageHandler(Filters.regex('^(pass)$'), testbookIn),
+            ],
+            DATE: [
+                MessageHandler(Filters.regex('#TODO DATE'), viewDateHistory),
             ]
         },
         fallbacks=[
