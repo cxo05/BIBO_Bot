@@ -48,25 +48,23 @@ def execute_sql(conn, sql, args=None):
 def help(update, context):
     context.bot.send_message(
         update.effective_chat.id,
-        '1) To join a company/battery.\n' +
+        '1) To join/update your name and company/battery.\n' +
         '   /join\n' +
         '2) To create a company/battery.\n' +
         '   /create_company\n' +
         '3) To book in or out\n' +
         '   /bookInOut\n' +
         '4) Show users\n' +
-        '   /getUsers\n'
+        '   /getUsers COMPANY_NAME\n' +
+        '5) View your history\n' +
+        '   /viewHistory\n'+
+        '6) View others history\n' +
+        '   /viewHistory NAME\n'
     )
 
 def saveUserName(update, context):
-    conn = connect_database(databasePath)
-    telegram_id = update.message.chat_id
-    sql = 'SELECT EXISTS (SELECT 1 FROM user WHERE telegram_id = (?))'
-    args = (telegram_id,)
-    [row] = execute_sql(conn, sql, args).fetchone()
-    if row:
-        update.message.reply_text("You are already in the database")
-        return ConversationHandler.END
+    if context.user_data["inDatabase"]:
+        update.message.reply_text("You are already in the database. You will now edit your details.")
     update.message.reply_text("Enter your name")
     return SAVE_NAME
 
@@ -78,14 +76,17 @@ def saveUserCompany(update, context):
 def addUser(update, context):
     conn = connect_database(databasePath)
     telegram_id = update.message.chat_id
-    sql = 'INSERT INTO user (telegram_id,full_name,company_id) VALUES (?,?, (SELECT id from company WHERE name = (?)))'
-    args = (telegram_id, context.user_data["name"], update.message.text)
+    sql = 'INSERT INTO user (full_name,company_id, telegram_id) VALUES (?, (SELECT id from company WHERE name = (?)), ?)'
+    args = (context.user_data["name"], update.message.text, telegram_id)
+    if(context.user_data["inDatabase"]):
+        sql = 'UPDATE user SET full_name = (?), company_id = (SELECT id from company WHERE name = (?)) WHERE telegram_id = (?)'
     try:
         execute_sql(conn, sql, args)
     except Error as e:
         update.message.reply_text("Company does not exist")
     else:
         update.message.reply_text(context.user_data["name"] + " has been added to " + update.message.text)
+        context.user_data["inDatabase"] = True
     return ConversationHandler.END
 
 def setAdmin(update, context):
@@ -184,13 +185,31 @@ def bookOut(update, context):
 
 def getUsers(update, context):
     conn = connect_database(databasePath)
-    sql = 'SELECT full_name, company_id FROM user'
-    results = execute_sql(conn, sql, ()).fetchall()
-    update.message.reply_text("Total users are:  " + str(len(results)) + "\n")
+    sql = 'SELECT full_name FROM user WHERE company_id = (SELECT id FROM company WHERE name = (?))'
+    args = (context.args[0],)
+    results = execute_sql(conn, sql, args).fetchall()
+    if(results):
+        text = ""
+        x = 0
+        for row in results:
+            x = x + 1
+            text = str(x) + ": " + str(row[0]) + " " + str(row[1]) + "\n"
+        update.message.reply_text(text)
+
+def viewUserHistory(update, context):
+    telegram_id = update.message.chat_id
+    if(context.args):
+        telegram_id = context.args[0]
+    #TODO Get telegram_id from name
+    conn = connect_database(databasePath)
+    sql = 'SELECT time_in, time_out FROM timesheet WHERE telegram_id = (?)'
+    args = (telegram_id,)
+    results = execute_sql(conn, sql, args).fetchall()
+    #TODO Make this a navigatable list using inlinekeyboard or think of a better way to view lesser data
     if(results):
         text = ""
         for row in results:
-            text = str(row[0]) + " " + str(row[1]) + "\n"
+            text = "In: " + f"{row[0]:%d-%m-%Y  %H%Mhrs}" + "\nOut: " + f"{row[1]:%d-%m-%Y  %H%Mhrs}" + "\n\n"
         update.message.reply_text(text)
 
 def cancel(update, context):
@@ -241,6 +260,7 @@ if __name__=="__main__":
     dispatcher.add_handler(CommandHandler("help", help))
     dispatcher.add_handler(CommandHandler("setAdmin", setAdmin))
     dispatcher.add_handler(CommandHandler("getUsers", getUsers))
+    dispatcher.add_handler(CommandHandler("viewHistory", viewUserHistory)
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("create_company", addCompanyMsg),
