@@ -234,21 +234,20 @@ def viewInCamp(update, context):
     #View In camp personnel
 
 def getDate(update, context):
-    update.message.reply_text("Enter a date DDMMYYYY:")
+    update.message.reply_text("Enter a date YYYY-MM-DD:")
     #TODO verify date
     return DATE
-    
+
 def viewDateHistory(update, context):
-    date = datetime.strptime(update.message.text, "DDMMYYYY")
+    date = datetime.strptime(update.message.text, "YYYY-MM-DD")
     conn = connect_database(databasePath)
-    sql = 'SELECT name FROM user JOIN SELECT time_in, time_out FROM timesheet ' #TODO Compare date
-    args = (date,)
+    sql = 'SELECT user.name, timesheet.time_in, timesheet.time_out FROM timesheet FULL OUTER JOIN user ON timesheet.telegram_id = user.telegram_id WHERE timesheet.time_in = (?) OR timesheet.time_out = (?)'
+    args = (date,date)
     results = execute_sql(conn, sql, args).fetchall()
-    #TODO Change formating to include users
     if(results):
         text = ""
         for row in results:
-            text = text + "In: " + datetime.fromisoformat(row[0]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[1], str) else "\n\n")
+            text = text + row[0] + "\nIn: " + datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[2]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[1], str) else "\n\n")
         update.message.reply_text(text)
 
 def cancel(update, context):
