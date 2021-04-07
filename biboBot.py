@@ -63,8 +63,10 @@ def help(update, context):
     )
 
 def saveUserName(update, context):
-    if context.user_data["inDatabase"]:
+    if "indatabase" in context.user_data:
         update.message.reply_text("You are already in the database. You will now edit your details.")
+    else:
+        context.user_data["indatabase"] = False
     update.message.reply_text("Enter your name")
     return SAVE_NAME
 
@@ -78,7 +80,7 @@ def addUser(update, context):
     telegram_id = update.message.chat_id
     sql = 'INSERT INTO user (full_name,company_id, telegram_id) VALUES (?, (SELECT id from company WHERE name = (?)), ?)'
     args = (context.user_data["name"], update.message.text, telegram_id)
-    if(context.user_data["inDatabase"]):
+    if(context.user_data["indatabase"]):
         sql = 'UPDATE user SET full_name = (?), company_id = (SELECT id from company WHERE name = (?)) WHERE telegram_id = (?)'
     try:
         execute_sql(conn, sql, args)
@@ -86,7 +88,7 @@ def addUser(update, context):
         update.message.reply_text("Company does not exist")
     else:
         update.message.reply_text(context.user_data["name"] + " has been added to " + update.message.text)
-        context.user_data["inDatabase"] = True
+        context.user_data["indatabase"] = True
     return ConversationHandler.END
 
 def setAdmin(update, context):
@@ -171,6 +173,15 @@ def authenticateLocation(update, context):
         execute_sql(conn, sql, args)
         update.message.reply_text("You have booked in")
 
+def testbookIn(update, context):
+    conn = connect_database(databasePath)
+    update.message.reply_text("Location valid")
+    #status is a bool (0 = Book in, 1 = Book out)
+    sql = 'INSERT INTO timesheet (telegram_id, time_in) VALUES (?,?)'
+    args = (update.message.chat_id, datetime.now())
+    execute_sql(conn, sql, args)
+    update.message.reply_text("You have booked in")
+
 def bookIn(update, context):
     update.message.reply_text("Send your location")
     return LOCATION
@@ -184,6 +195,9 @@ def bookOut(update, context):
     update.message.reply_text("You have booked out")
 
 def getUsers(update, context):
+    if not context.args:
+        update.message.reply_text("/getUsers BATTERY_NAME")
+        return
     conn = connect_database(databasePath)
     sql = 'SELECT full_name FROM user WHERE company_id = (SELECT id FROM company WHERE name = (?))'
     args = (context.args[0],)
@@ -193,15 +207,19 @@ def getUsers(update, context):
         x = 0
         for row in results:
             x = x + 1
-            text = str(x) + ": " + str(row[0]) + " " + str(row[1]) + "\n"
+            text = str(x) + ". " + str(row[0]) + "\n"
         update.message.reply_text(text)
+    else:
+        update.message.reply_text("Battery does not exist")
 
 def viewUserHistory(update, context):
     telegram_id = update.message.chat_id
-    if(context.args):
-        telegram_id = context.args[0]
-    #TODO Get telegram_id from name
     conn = connect_database(databasePath)
+    if(context.args):
+        sql_1 = 'SELECT telegram_id FROM user WHERE name = (?)'
+        args_1 = (context.args[0],)
+        telegram_id = execute_sql(conn, sql_1, args_1).fetchone()
+        logger.info(telegram_id)
     sql = 'SELECT time_in, time_out FROM timesheet WHERE telegram_id = (?)'
     args = (telegram_id,)
     results = execute_sql(conn, sql, args).fetchall()
@@ -209,7 +227,7 @@ def viewUserHistory(update, context):
     if(results):
         text = ""
         for row in results:
-            text = "In: " + f"{row[0]:%d-%m-%Y  %H%Mhrs}" + "\nOut: " + f"{row[1]:%d-%m-%Y  %H%Mhrs}" + "\n\n"
+            text = text + "In: " + datetime.fromisoformat(row[0]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[1], str) else "\n\n")
         update.message.reply_text(text)
 
 def cancel(update, context):
@@ -224,7 +242,7 @@ if __name__=="__main__":
 
     sql_create_user_table = """CREATE TABLE IF NOT EXISTS user (
                                     telegram_id integer PRIMARY KEY,
-                                    full_name text NOT NULL,
+                                    full_name text UNIQUE NOT NULL,
                                     isAdmin integer DEFAULT 0,
                                     company_id integer NOT NULL,
                                     FOREIGN KEY (company_id) REFERENCES company (id)
@@ -238,8 +256,8 @@ if __name__=="__main__":
                                     FOREIGN KEY (telegram_id) REFERENCES user (telegram_id)
                                 );"""
 
-    sql_create_default_company = """INSERT INTO company (name) VALUES (
-                                    "Bravo"
+    sql_create_default_company = """INSERT INTO company (name) SELECT 'Bravo' WHERE NOT EXISTS (
+                                        SELECT 1 FROM company WHERE name = 'Bravo'
                                     );"""
 
     #Connect to database
@@ -260,7 +278,7 @@ if __name__=="__main__":
     dispatcher.add_handler(CommandHandler("help", help))
     dispatcher.add_handler(CommandHandler("setAdmin", setAdmin))
     dispatcher.add_handler(CommandHandler("getUsers", getUsers))
-    dispatcher.add_handler(CommandHandler("viewHistory", viewUserHistory)
+    dispatcher.add_handler(CommandHandler("viewHistory", viewUserHistory))
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("create_company", addCompanyMsg),
@@ -283,6 +301,7 @@ if __name__=="__main__":
             ],
             LOCATION: [
                 MessageHandler(Filters.location, authenticateLocation),
+                MessageHandler(Filters.regex('^(pass)$'), testbookIn),
             ]
         },
         fallbacks=[
