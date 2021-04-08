@@ -15,15 +15,16 @@ from telegram.ext import (
     MessageHandler,
     Filters
 )
-from telegram import ReplyKeyboardMarkup
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
+import telegramcalendar
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
-SAVE_NAME, SAVE_COMPANY, COMPANY_NAME, BIBO, LOCATION, DATE = range(6)
+SAVE_NAME, SAVE_COMPANY, COMPANY_NAME, BIBO, LOCATION = range(5)
 
 def connect_database(file):
     #Connect to database
@@ -59,7 +60,9 @@ def help(update, context):
         '5) View your history\n' +
         '   /viewHistory\n'+
         '6) View others history\n' +
-        '   /viewHistory NAME\n'
+        '   /viewHistory NAME\n' +
+        '7) View particular date\n' +
+        '   /viewDateHistory\n'
     )
 
 def saveUserName(update, context):
@@ -211,6 +214,7 @@ def getUsers(update, context):
         update.message.reply_text(text)
     else:
         update.message.reply_text("Battery does not exist")
+    return ConversationHandler.END
 
 def viewUserHistory(update, context):
     telegram_id = update.message.chat_id
@@ -229,26 +233,35 @@ def viewUserHistory(update, context):
         for row in results:
             text = text + "In: " + datetime.fromisoformat(row[0]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[1], str) else "\n\n")
         update.message.reply_text(text)
+    return ConversationHandler.END
 
 def viewInCamp(update, context):
     #View In camp personnel
+    return
 
 def getDate(update, context):
-    update.message.reply_text("Enter a date YYYY-MM-DD:")
-    #TODO verify date
-    return DATE
+    update.message.reply_text("Please select a date: ", reply_markup=telegramcalendar.create_calendar())
 
 def viewDateHistory(update, context):
-    date = datetime.strptime(update.message.text, "YYYY-MM-DD")
+    selected,date = telegramcalendar.process_calendar_selection(update, context)
+    if selected:
+        context.bot.send_message(chat_id=update.callback_query.from_user.id,
+                        text="You selected %s" % (date.strftime("%d/%m/%Y")),
+                        reply_markup=ReplyKeyboardRemove())
+    date = date.strftime("%Y-%m-%d")
     conn = connect_database(databasePath)
-    sql = 'SELECT user.name, timesheet.time_in, timesheet.time_out FROM timesheet FULL OUTER JOIN user ON timesheet.telegram_id = user.telegram_id WHERE timesheet.time_in = (?) OR timesheet.time_out = (?)'
-    args = (date,date)
+    sql = '''
+        SELECT user.full_name, timesheet.time_in, timesheet.time_out FROM timesheet LEFT JOIN user ON timesheet.telegram_id = user.telegram_id WHERE date(timesheet.time_in) = (?) OR date(timesheet.time_out) = (?)
+        UNION
+        SELECT user.full_name, timesheet.time_in, timesheet.time_out FROM user LEFT JOIN timesheet ON timesheet.telegram_id = user.telegram_id WHERE date(timesheet.time_in) = (?) OR date(timesheet.time_out) = (?)
+    '''
+    args = (date,date,date,date)
     results = execute_sql(conn, sql, args).fetchall()
     if(results):
         text = ""
         for row in results:
-            text = text + row[0] + "\nIn: " + datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[2]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[1], str) else "\n\n")
-        update.message.reply_text(text)
+            text = text + row[0] + "\nIn: " + datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[2]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[2], str) else "\n\n")
+        context.bot.send_message(chat_id=update.callback_query.from_user.id, text=text)
 
 def cancel(update, context):
     update.message.reply_text('Current operation canceled')
@@ -299,12 +312,14 @@ if __name__=="__main__":
     dispatcher.add_handler(CommandHandler("setAdmin", setAdmin))
     dispatcher.add_handler(CommandHandler("getUsers", getUsers))
     dispatcher.add_handler(CommandHandler("viewHistory", viewUserHistory))
+    dispatcher.add_handler(CommandHandler("viewInCamp", viewInCamp))
+    dispatcher.add_handler(CommandHandler("viewDateHistory", getDate))
+    dispatcher.add_handler(CallbackQueryHandler(viewDateHistory))
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("create_company", addCompanyMsg),
             CommandHandler("bookInOut", InOutButton),
             CommandHandler("join", saveUserName),
-            CommandHandler("getDateHistory", getDate),
         ],
         states={
             SAVE_NAME:[
@@ -324,9 +339,6 @@ if __name__=="__main__":
                 MessageHandler(Filters.location, authenticateLocation),
                 MessageHandler(Filters.regex('^(pass)$'), testbookIn),
             ],
-            DATE: [
-                MessageHandler(Filters.regex('#TODO DATE'), viewDateHistory),
-            ]
         },
         fallbacks=[
             MessageHandler(Filters.text & ~Filters.command, cancel),
