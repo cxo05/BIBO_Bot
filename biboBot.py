@@ -4,6 +4,7 @@ load_dotenv()
 import os
 botKey = os.environ.get("bot_key") #Create a .env file in root folder with bot_key=INSERTKEYHERE
 databasePath = os.environ.get("databasePath") #Create new line with databasePath=INSERTDATABASEPATHHERE
+DEVELOPER_CHAT_ID = os.environ.get("dev_chat_id") #Create new line with dev_chat_id=INSERTCHATIDHERE
 import sqlite3
 import logging
 from sqlite3 import Error
@@ -43,10 +44,13 @@ def execute_sql(conn, sql, args=None):
         c.execute(sql, args)
         conn.commit()
         return c
-    except Error as e:
-        logger.error(e)
+    except Error:
+        logger.exception("message")
 
 def help(update, context):
+    update.effective_message.reply_html(
+        f'Your chat id is <code>{update.effective_chat.id}</code>.'
+    )
     context.bot.send_message(
         update.effective_chat.id,
         '1) To join/update your name and company/battery.\n' +
@@ -63,6 +67,8 @@ def help(update, context):
         '   /viewHistory NAME\n' +
         '7) View particular date\n' +
         '   /viewDateHistory\n'
+        '8) View people in camp\n' +
+        '   /viewInCamp\n'
     )
 
 def saveUserName(update, context):
@@ -191,11 +197,13 @@ def bookIn(update, context):
 
 def bookOut(update, context):
     conn = connect_database(databasePath)
-    #status is a bool (0 = Book in, 1 = Book out)
-    sql = 'UPDATE timesheet SET time_out = (?) WHERE telegram_id = (?) AND time_out = NULL ORDER BY datetime(time_in) DESC LIMIT 1'
+    sql = 'UPDATE timesheet SET time_out = (?) WHERE id = (SELECT id FROM timesheet WHERE telegram_id = (?) ORDER BY time_in DESC LIMIT 1) AND time_out IS NULL'
     args = (datetime.now(), update.message.chat_id)
-    execute_sql(conn, sql, args)
-    update.message.reply_text("You have booked out")
+    result = execute_sql(conn, sql, args)
+    if(result.rowcount == 1):
+        update.message.reply_text("You have booked out")
+    else:
+        update.message.reply_text("You have not booked in")
 
 def getUsers(update, context):
     if not context.args:
@@ -205,12 +213,12 @@ def getUsers(update, context):
     sql = 'SELECT full_name FROM user WHERE company_id = (SELECT id FROM company WHERE name = (?))'
     args = (context.args[0],)
     results = execute_sql(conn, sql, args).fetchall()
-    if(results):
+    if(results.rowcount > 0):
         text = ""
         x = 0
         for row in results:
             x = x + 1
-            text = str(x) + ". " + str(row[0]) + "\n"
+            text = text + str(x) + ". " + str(row[0]) + "\n"
         update.message.reply_text(text)
     else:
         update.message.reply_text("Battery does not exist")
@@ -236,8 +244,25 @@ def viewUserHistory(update, context):
     return ConversationHandler.END
 
 def viewInCamp(update, context):
-    #View In camp personnel
-    return
+    conn = connect_database(databasePath)
+    sql = '''
+            SELECT
+                telegram_id, max(id) AS max_id
+            FROM
+                timesheet
+            GROUP BY
+                telegram_id
+        '''
+    results = execute_sql(conn, sql, ()).fetchall()
+    if(len(results) == 0):
+        update.message.reply_text("No one in camp")
+    else:
+        text = ""
+        x = 0
+        for row in results:
+            x = x + 1
+            text = text + str(x) + ". " + str(row) + "\n"
+        update.message.reply_text(text)
 
 def getDate(update, context):
     update.message.reply_text("Please select a date: ", reply_markup=telegramcalendar.create_calendar())
@@ -266,6 +291,24 @@ def viewDateHistory(update, context):
 def cancel(update, context):
     update.message.reply_text('Current operation canceled')
     return ConversationHandler.END
+
+def error_handler(update, context):
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
+    tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
+    tb_string = ''.join(tb_list)
+
+    update_str = update.to_dict() if isinstance(update, Update) else str(update)
+    message = (
+        f'An exception was raised while handling an update\n'
+        f'<pre>update = {html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}'
+        '</pre>\n\n'
+        f'<pre>context.chat_data = {html.escape(str(context.chat_data))}</pre>\n\n'
+        f'<pre>context.user_data = {html.escape(str(context.user_data))}</pre>\n\n'
+        f'<pre>{html.escape(tb_string)}</pre>'
+    )
+
+    context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML)
 
 if __name__=="__main__":
     sql_create_company_table = """CREATE TABLE IF NOT EXISTS company (
@@ -346,6 +389,7 @@ if __name__=="__main__":
         allow_reentry=True
     )
     dispatcher.add_handler(conv_handler)
+    dispatcher.add_error_handler(error_handler)
 
     #start telegram bot
     updater.start_polling()
