@@ -170,7 +170,7 @@ def authenticateLocation(update, context):
     distance = R * c
 
     #Changing radius from a point in camp to register too far or near
-    if distance>5:
+    if distance>1:
         update.message.reply_text("Too far from camp, move closer and resend your location")
         return LOCATION
     else:
