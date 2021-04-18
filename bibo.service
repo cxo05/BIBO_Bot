@@ -2,7 +2,7 @@
 Description=BIBO Telegram Bot Service
 
 [Service]
-ExecStart=/usr/bin/python ~/
+ExecStart=/usr/bin/python ~/BIBO_Bot/biboBot.py
 Restart=on-failure
 
 [Install]
