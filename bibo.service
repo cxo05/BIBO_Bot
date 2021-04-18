@@ -1,0 +1,7 @@
+#Save in /etc/systemd/user
+
+[Unit]
+Description=BIBO Telegram Bot Service
+
+[Service]
+ExecStart=/usr/bin/python ~/

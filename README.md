@@ -22,3 +22,11 @@ pip install -r requirements.txt
 #Running the bot
 py biboBot.py
 ```
+#Setting up raspberry pi for deployment
+
+```bash
+ssh pi@IP_ADDRESS
+#Change network if necessary
+sudo nano /etc/wpa_supplicant/wpa_supplicant.conf
+#Follow steps in [Development](#Development)
+```
