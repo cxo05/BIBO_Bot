@@ -228,10 +228,23 @@ def viewUserHistory(update, context):
     telegram_id = update.message.chat_id
     conn = connect_database(databasePath)
     if(context.args):
-        sql_1 = 'SELECT telegram_id FROM user WHERE name = (?)'
-        args_1 = (context.args[0],)
-        telegram_id = execute_sql(conn, sql_1, args_1).fetchone()
-        logger.info(telegram_id)
+        conn = connect_database(databasePath)
+        sql = 'SELECT isAdmin FROM user WHERE telegram_id = (?)'
+        args = (update.message.chat_id,)
+        asd = execute_sql(conn, sql, args).fetchone()
+        if(asd[0] == 1):
+    
+            sql_1 = 'SELECT telegram_id FROM user WHERE full_name = (?)'
+            args_1=""
+            for i in range(len(context.args)):
+                args_1=args_1+str(context.args[i])+" "
+            args_1=(args_1[0:-1],)
+            telegram_id = execute_sql(conn, sql_1, args_1).fetchone()[0]
+            logger.info(telegram_id)
+        else:
+            update.message.reply_text("You are not an admin")
+            return ConversationHandler.END
+        
     sql = 'SELECT time_in, time_out FROM timesheet WHERE telegram_id = (?)'
     args = (telegram_id,)
     results = execute_sql(conn, sql, args).fetchall()
