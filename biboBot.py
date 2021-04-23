@@ -270,11 +270,21 @@ def viewInCamp(update, context):
     if(len(results) == 0):
         update.message.reply_text("No one in camp")
     else:
-        text = ""
-        x = 0
-        for row in results:
-            x = x + 1
-            text = text + str(x) + ". " + str(row) + "\n"
+       for i in range(len(results)):
+            id=results[i][0]
+            print(id)
+            sql='''
+                SELECT
+                    full_name
+                FROM
+                    user
+                WHERE
+                    telegram_id=(?)
+                '''
+            args=(id,)
+            x=execute_sql(conn,sql,args).fetchall()[0][0]
+            text = ""
+            text = text + str(x) + ". " + "\n"
         update.message.reply_text(text)
 
 def getDate(update, context):
