@@ -16,7 +16,7 @@ from telegram.ext import (
     MessageHandler,
     Filters
 )
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, Parsemode
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, Parsemode, Bot as bot
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 import telegramcalendar
@@ -294,9 +294,9 @@ def getDate(update, context):
     update.message.reply_text("Please select a date: ", reply_markup=telegramcalendar.create_calendar())
 
 def viewDateHistory(update, context):
-    selected,date = telegramcalendar.process_calendar_selection(update, context)
+    selected,date = telegramcalendar.process_calendar_selection(bot, update)
     if selected:
-        context.bot.send_message(chat_id=update.callback_query.from_user.id,
+        bot(token=botKey).send_message(chat_id=update.callback_query.from_user.id,
                         text="You selected %s" % (date.strftime("%d/%m/%Y")),
                         reply_markup=ReplyKeyboardRemove())
     date = date.strftime("%Y-%m-%d")
