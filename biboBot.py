@@ -51,9 +51,6 @@ def execute_sql(conn, sql, args=None):
         logger.exception("message")
 
 def help(update, context):
-    update.effective_message.reply_html(
-        f'Your chat id is <code>{update.effective_chat.id}</code>.'
-    )
     context.bot.send_message(
         update.effective_chat.id,
         '1) To join/update your name and company/battery.\n' +
