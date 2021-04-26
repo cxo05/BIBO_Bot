@@ -16,13 +16,13 @@ from telegram.ext import (
     MessageHandler,
     Filters
 )
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, Parsemode, Bot as bot
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Bot as bot #, Update, Parsemode, Bot as bot    
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 import telegramcalendar
-import traceback
-import sys
-import html
+#import traceback
+#import sys
+#import html
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -270,7 +270,7 @@ def viewInCamp(update, context):
     if(len(results) == 0):
         update.message.reply_text("No one in camp")
     else:
-       for i in range(len(results)):
+        for i in range(len(results)):
             id=results[i][0]
             print(id)
             sql='''
@@ -315,7 +315,7 @@ def cancel(update, context):
     update.message.reply_text('Current operation canceled')
     return ConversationHandler.END
 
-def error_handler(update, context):
+'''def error_handler(update, context):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
     tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
@@ -343,7 +343,7 @@ def error_handler(update, context):
     )
 
     context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message) #Parsemode is not HTML cause it cannot start with "'"
-    context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message2, parse_mode=ParseMode.HTML)
+    context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message2, parse_mode=ParseMode.HTML)'''
 
 if __name__=="__main__":
     sql_create_company_table = """CREATE TABLE IF NOT EXISTS company (
@@ -424,7 +424,7 @@ if __name__=="__main__":
         allow_reentry=True
     )
     dispatcher.add_handler(conv_handler)
-    dispatcher.add_error_handler(error_handler)
+    #dispatcher.add_error_handler(error_handler)
 
     #start telegram bot
     updater.start_polling()
