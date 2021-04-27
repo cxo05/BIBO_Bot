@@ -213,7 +213,7 @@ def getUsers(update, context):
     sql = 'SELECT full_name FROM user WHERE company_id = (SELECT id FROM company WHERE name = (?))'
     args = (context.args[0],)
     results = execute_sql(conn, sql, args).fetchall()
-    if(results.rowcount > 0):
+    if(len(results) > 0):
         text = ""
         x = 0
         for row in results:
@@ -258,33 +258,22 @@ def viewUserHistory(update, context):
 
 def viewInCamp(update, context):
     conn = connect_database(databasePath)
-    sql = '''
-            SELECT
-                telegram_id, max(id) AS max_id
-            FROM
-                timesheet
-            WHERE
-                time_out IS NULL OR time_out="" 
-        '''
+    sql = """
+            SELECT 
+                user.full_name 
+            FROM 
+                (SELECT telegram_id AS t_id, max(id) AS max_id, time_out AS out FROM timesheet GROUP BY telegram_id) 
+            JOIN 
+                user ON user.telegram_id = t_id
+            WHERE out IS NULL
+        """
     results = execute_sql(conn, sql, ()).fetchall()
-    if(len(results) == 0):
+    if (len(results) == 0):
         update.message.reply_text("No one in camp")
     else:
-        for i in range(len(results)):
-            id=results[i][0]
-            print(id)
-            sql='''
-                SELECT
-                    full_name
-                FROM
-                    user
-                WHERE
-                    telegram_id=(?)
-                '''
-            args=(id,)
-            x=execute_sql(conn,sql,args).fetchall()[0][0]
-            text = ""
-            text = text + str(x) + ". " + "\n"
+        text = ""
+        for index, user in enumerate(results, start=1):    
+            text = text + str(index) + ". " + user[0] + "\n"
         update.message.reply_text(text)
 
 def getDate(update, context):
