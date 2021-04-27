@@ -263,8 +263,8 @@ def viewInCamp(update, context):
                 telegram_id, max(id) AS max_id
             FROM
                 timesheet
-            GROUP BY
-                telegram_id
+            WHERE
+                time_out IS NULL OR time_out="" 
         '''
     results = execute_sql(conn, sql, ()).fetchall()
     if(len(results) == 0):
