@@ -16,13 +16,12 @@ from telegram.ext import (
     MessageHandler,
     Filters
 )
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove #, Update, Parsemode, Bot as bot    
+from telegram.error import  TimedOut, NetworkError, TelegramError
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 import telegramcalendar
-#import traceback
-#import sys
-#import html
+
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -304,35 +303,11 @@ def cancel(update, context):
     update.message.reply_text('Current operation canceled')
     return ConversationHandler.END
 
-'''def error_handler(update, context):
-    logger.error(msg="Exception while handling an update:", exc_info=context.error)
-
-    tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
-    tb_string = ''.join(tb_list)
-
-    update_str = update.to_dict() if isinstance(update, Update) else str(update)
-    #personally better for viewing if it is not loaded from json (which was used in the original method)
-    #Not using the previous method also reduces the size of the message, allowing it to be sent using telegram
-    
-    x = str(update_str).split(", ")
-    y=""
-    for i in range(len(x)):
-        y=y+str(x[i])+"\n"
-        
-    #Split into two messages because of the message size limit in telegram
-    message = (
-        f'An exception was raised while handling an update\n'
-        f'<pre>update = {y}'
-    )
-    
-    message2 = (
-        f'<pre>context.chat_data = {html.escape(str(context.chat_data))}</pre>\n\n'
-        f'<pre>context.user_data = {html.escape(str(context.user_data))}</pre>\n\n'
-        f'<pre>{html.escape(tb_string)}</pre>'
-    )
-
-    context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message) #Parsemode is not HTML cause it cannot start with "'"
-    context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message2, parse_mode=ParseMode.HTML)'''
+def error_handler(update, context):
+    logger.warning('Update "%s" caused error "%s"', update, context.error)
+    updater.stop()
+    updater.is_idle = False
+    #Definitely not the best solution but the fastest one to get systemctl to restart the service
 
 if __name__=="__main__":
     sql_create_company_table = """CREATE TABLE IF NOT EXISTS company (
@@ -413,7 +388,7 @@ if __name__=="__main__":
         allow_reentry=True
     )
     dispatcher.add_handler(conv_handler)
-    #dispatcher.add_error_handler(error_handler)
+    dispatcher.add_error_handler(error_handler)
 
     #start telegram bot
     updater.start_polling()
