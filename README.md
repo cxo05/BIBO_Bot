@@ -15,16 +15,17 @@ Requirements :
 git clone https://github.com/2x0c0h1/BIBO_Bot.git
 cd BIBO_Bot
 #Create .env variables
-echo bot_key=_INSERTKEYHERE_ >> .env
-echo databasePath=bibo.db >> .env
-echo dev_chat_id=_ID_ >> .env
+cat > .env << EOF
+bot_key=_INSERTKEYHERE_
+databasePath=bibo.db
+EOF
 #Install packages
 pip install -r requirements.txt
 #Running the bot
 py biboBot.py
 ```
 
-#Setting up raspberry pi for deployment
+#Deployment to raspberry pi
 
 Learning materials:
 
@@ -32,27 +33,20 @@ Learning materials:
 * [Systemd](https://github.com/torfsen/python-systemd-tutorial)
 
 ```bash
-#SSH
+#Connect to pi assuming its already setup
 ssh pi@IP_ADDRESS
 #Change network if necessary
 sudo nano /etc/wpa_supplicant/wpa_supplicant.conf
-cd ~
 #Same as development
 git clone https://github.com/2x0c0h1/BIBO_Bot.git
-cd BIBO_Bot
-#Create .env variables
-echo bot_key=_INSERTKEYHERE_ >> .env
-echo databasePath=bibo.db >> .env
-echo dev_chat_id=_ID_ >> .env
-#Install packages
-pip install -r requirements.txt
-#Copy bibo.service to /etc/systemd/user
-cp bibo.service /etc/systemd/user
+...
+...
+#Copy bibo.service to /etc/systemd/system
+cp bibo.service /etc/systemd/system
 #Reload
-systemctl --user daemon-reload
+systemctl daemon-reload
 #Enable autorun on boot
-systemctl --user enable bibo
-sudo loginctl enable-linger $USER
-#Check if service is enabled
-systemctl --user list-unit-files
+systemctl enable bibo
+#Check/debug service
+systemctl status bibo
 ```

@@ -4,7 +4,6 @@ load_dotenv()
 import os
 botKey = os.environ.get("bot_key") #Create a .env file in root folder with bot_key=INSERTKEYHERE
 databasePath = os.environ.get("databasePath") #Create new line with databasePath=INSERTDATABASEPATHHERE
-DEVELOPER_CHAT_ID = os.environ.get("dev_chat_id") #Create new line with dev_chat_id=INSERTCHATIDHERE
 import sqlite3
 import logging
 from sqlite3 import Error
@@ -16,12 +15,10 @@ from telegram.ext import (
     MessageHandler,
     Filters
 )
-from telegram.error import  TimedOut, NetworkError, TelegramError
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 import telegramcalendar
-
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -168,14 +165,13 @@ def authenticateLocation(update, context):
 
     distance = R * c
 
-    #Changing radius from a point in camp to register too far or near
+    #Checking distance
     if distance>1:
         update.message.reply_text("Too far from camp, move closer and resend your location")
         return LOCATION
     else:
         conn = connect_database(databasePath)
         update.message.reply_text("Location valid")
-        #status is a bool (0 = Book in, 1 = Book out)
         sql = 'INSERT INTO timesheet (telegram_id, time_in) VALUES (?,?)'
         args = (update.message.chat_id, datetime.now())
         execute_sql(conn, sql, args)
@@ -184,7 +180,6 @@ def authenticateLocation(update, context):
 def testbookIn(update, context):
     conn = connect_database(databasePath)
     update.message.reply_text("Location valid")
-    #status is a bool (0 = Book in, 1 = Book out)
     sql = 'INSERT INTO timesheet (telegram_id, time_in) VALUES (?,?)'
     args = (update.message.chat_id, datetime.now())
     execute_sql(conn, sql, args)
@@ -305,9 +300,6 @@ def cancel(update, context):
 
 def error_handler(update, context):
     logger.warning('Update "%s" caused error "%s"', update, context.error)
-    updater.stop()
-    updater.is_idle = False
-    #Definitely not the best solution but the fastest one to get systemctl to restart the service
 
 if __name__=="__main__":
     sql_create_company_table = """CREATE TABLE IF NOT EXISTS company (
