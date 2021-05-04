@@ -275,7 +275,7 @@ def viewInCamp(update, context):
                 user ON user.telegram_id = t_id
             WHERE out IS NULL
         """
-    results = execute_sql(conn, sql, args).fetchall()
+    results = execute_sql(conn, sql, ()).fetchall()
     if (len(results) == 0):
         update.message.reply_text("No one in camp")
     else:
