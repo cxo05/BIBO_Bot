@@ -273,7 +273,7 @@ def viewInCamp(update, context):
                 (SELECT telegram_id AS t_id, max(id) AS max_id, time_out AS out FROM timesheet GROUP BY telegram_id) 
             JOIN 
                 user ON user.telegram_id = t_id
-            WHERE out IS NULL AND user.company_id = (?)
+            WHERE out IS NULL
         """
     results = execute_sql(conn, sql, args).fetchall()
     if (len(results) == 0):
