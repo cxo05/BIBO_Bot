@@ -15,7 +15,7 @@ from telegram.ext import (
     MessageHandler,
     Filters
 )
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 import telegramcalendar
@@ -24,7 +24,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 logger = logging.getLogger(__name__)
 
-SAVE_NAME, SAVE_COMPANY, COMPANY_NAME, BIBO, LOCATION = range(5)
+SAVE_NAME, SAVE_COMPANY, ADD_COMPANY, GET_USERS, VIEW_IN_CAMP, BIBO, LOCATION = range(7)
 
 def connect_database(file):
     #Connect to database
@@ -56,7 +56,7 @@ def help(update, context):
         '3) To book in or out\n' +
         '   /bookInOut\n' +
         '4) Show users\n' +
-        '   /getUsers COMPANY_NAME\n' +
+        '   /getUsers\n' +
         '5) View your history\n' +
         '   /viewHistory\n'+
         '6) View others history\n' +
@@ -114,7 +114,7 @@ def addCompanyMsg(update, context):
     asd = execute_sql(conn, sql, args).fetchone()
     if(asd[0] == 1):
         update.message.reply_text("Enter company/battery name")
-        return COMPANY_NAME
+        return ADD_COMPANY
     else:
         update.message.reply_text("You are not an admin")
         return ConversationHandler.END
@@ -166,7 +166,7 @@ def authenticateLocation(update, context):
     distance = R * c
 
     #Checking distance
-    if distance>1:
+    if distance>0.2:
         update.message.reply_text("Too far from camp, move closer and resend your location")
         return LOCATION
     else:
@@ -186,7 +186,8 @@ def testbookIn(update, context):
     update.message.reply_text("You have booked in")
 
 def bookIn(update, context):
-    update.message.reply_text("Send your location")
+    keyboard = [[KeyboardButton("Current Location", request_location=True)]]
+    update.message.reply_text("Send your location: ", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
     return LOCATION
 
 def bookOut(update, context):
@@ -199,13 +200,15 @@ def bookOut(update, context):
     else:
         update.message.reply_text("You have not booked in")
 
+def getUsersMsg(update, context):
+    update.message.reply_text("Enter company/battery name")
+    return GET_USERS
+
 def getUsers(update, context):
-    if not context.args:
-        update.message.reply_text("/getUsers BATTERY_NAME")
-        return
+    company_name = update.message.text
     conn = connect_database(databasePath)
     sql = 'SELECT full_name FROM user WHERE company_id = (SELECT id FROM company WHERE name = (?))'
-    args = (context.args[0],)
+    args = (company_name,)
     results = execute_sql(conn, sql, args).fetchall()
     if(len(results) > 0):
         text = ""
@@ -215,7 +218,7 @@ def getUsers(update, context):
             text = text + str(x) + ". " + str(row[0]) + "\n"
         update.message.reply_text(text)
     else:
-        update.message.reply_text("Battery does not exist")
+        update.message.reply_text("Company/Battery does not exist")
     return ConversationHandler.END
 
 def viewUserHistory(update, context):
@@ -250,8 +253,19 @@ def viewUserHistory(update, context):
         update.message.reply_text(text)
     return ConversationHandler.END
 
+def viewInCampMsg(update, context):
+    update.message.reply_text("Enter company/battery name")
+    return VIEW_IN_CAMP
+
 def viewInCamp(update, context):
     conn = connect_database(databasePath)
+    company_name = update.message.text
+    sql_1 = 'SELECT id FROM company WHERE name = (?)'
+    args = (company_name,)
+    results = execute_sql(conn, sql_1, args).fetchall() 
+    if(len(results) == 0):
+        update.message.reply_text("Company/Battery does not exist")
+        return ConversationHandler.END
     sql = """
             SELECT 
                 user.full_name 
@@ -259,9 +273,9 @@ def viewInCamp(update, context):
                 (SELECT telegram_id AS t_id, max(id) AS max_id, time_out AS out FROM timesheet GROUP BY telegram_id) 
             JOIN 
                 user ON user.telegram_id = t_id
-            WHERE out IS NULL
+            WHERE out IS NULL AND user.company_id = (?)
         """
-    results = execute_sql(conn, sql, ()).fetchall()
+    results = execute_sql(conn, sql, args).fetchall()
     if (len(results) == 0):
         update.message.reply_text("No one in camp")
     else:
@@ -344,9 +358,7 @@ if __name__=="__main__":
     dispatcher.add_handler(CommandHandler("start", help))
     dispatcher.add_handler(CommandHandler("help", help))
     dispatcher.add_handler(CommandHandler("setAdmin", setAdmin))
-    dispatcher.add_handler(CommandHandler("getUsers", getUsers))
     dispatcher.add_handler(CommandHandler("viewHistory", viewUserHistory))
-    dispatcher.add_handler(CommandHandler("viewInCamp", viewInCamp))
     dispatcher.add_handler(CommandHandler("viewDateHistory", getDate))
     dispatcher.add_handler(CallbackQueryHandler(viewDateHistory))
     conv_handler = ConversationHandler(
@@ -354,6 +366,8 @@ if __name__=="__main__":
             CommandHandler("create_company", addCompanyMsg),
             CommandHandler("bookInOut", InOutButton),
             CommandHandler("join", saveUserName),
+            CommandHandler("getUsers", getUsersMsg),
+            CommandHandler("viewInCamp", viewInCampMsg)
         ],
         states={
             SAVE_NAME:[
@@ -362,8 +376,14 @@ if __name__=="__main__":
             SAVE_COMPANY:[
                 MessageHandler(Filters.text & ~Filters.command, addUser),
             ],
-            COMPANY_NAME: [
+            ADD_COMPANY: [
                 MessageHandler(Filters.text & ~Filters.command, addCompany),
+            ],
+            GET_USERS: [
+                MessageHandler(Filters.text & ~Filters.command, getUsers),
+            ],
+            VIEW_IN_CAMP: [
+                MessageHandler(Filters.text & ~Filters.command, viewInCamp),
             ],
             BIBO: [
                 MessageHandler(Filters.regex('^(Book In)$'), bookIn),
