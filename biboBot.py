@@ -142,29 +142,29 @@ def authenticateLocation(update, context):
     logger.info(
         "Location: %f / %f", local.latitude, local.longitude
     )
-    local1=str(local)
-    local2=""
-    for number in local1:
-        if number in "0123456789. ":
-            local2= local2 + number
-    places=local2.split(" ")
+    live_period=local.live_period
+    
+    if live_period==None:
+        update.message.reply_text("Pls send live location")
+        return LOCATION
+    
+    else:
+        #Calculation for distance between two points
+        R = 6373.0
 
-    #Calculation for distance between two points
-    R = 6373.0
+        lat1 = radians(float(local.latitude))
+        lon1 = radians(float(local.longitude))
+        lat2 = radians(1.4248641143077456)
+        lon2 = radians(103.82664614345568)
 
-    lat1 = radians(float(places[3]))
-    lon1 = radians(float(places[1]))
-    lat2 = radians(1.4248641143077456)
-    lon2 = radians(103.82664614345568)
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
 
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
+        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
-    a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
-    c = 2 * atan2(sqrt(a), sqrt(1 - a))
-
-    distance = R * c
-
+        distance = R * c
+  
     #Checking distance
     if distance>0.2:
         update.message.reply_text("Too far from camp, move closer and resend your location")
