@@ -207,7 +207,7 @@ def getUsersMsg(update, context):
 def getUsers(update, context):
     company_name = update.message.text
     conn = connect_database(databasePath)
-    sql = 'SELECT full_name FROM user WHERE company_id = (SELECT id FROM company WHERE name = (?))'
+    sql = 'SELECT full_name FROM user WHERE company_id = (SELECT id FROM company WHERE name = (?)) ORDER BY full_name ASC'
     args = (company_name,)
     results = execute_sql(conn, sql, args).fetchall()
     if(len(results) > 0):
@@ -268,12 +268,13 @@ def viewInCamp(update, context):
         return ConversationHandler.END
     sql_1 = """
             SELECT
-                user.full_name, user.company_id
+                user.full_name
             FROM
                 (SELECT telegram_id AS t_id, max(id) AS max_id, time_out AS out FROM timesheet GROUP BY telegram_id)
             INNER JOIN
                 user ON (user.telegram_id = t_id)
             WHERE out IS NULL AND user.company_id = (?)
+            ORDER BY user.full_name
         """
     args_1 = (results[0],)
     results = execute_sql(conn, sql_1, args_1).fetchall()
