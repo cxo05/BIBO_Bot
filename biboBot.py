@@ -111,8 +111,8 @@ def addCompanyMsg(update, context):
     conn = connect_database(databasePath)
     sql = 'SELECT isAdmin FROM user WHERE telegram_id = (?)'
     args = (update.message.chat_id,)
-    asd = execute_sql(conn, sql, args).fetchone()
-    if(asd[0] == 1):
+    asd = execute_sql(conn, sql, args).fetchall()
+    if(len(asd) == 0):
         update.message.reply_text("Enter company/battery name")
         return ADD_COMPANY
     else:
@@ -143,11 +143,11 @@ def authenticateLocation(update, context):
         "Location: %f / %f", local.latitude, local.longitude
     )
     live_period=local.live_period
-    
+
     if live_period==None:
         update.message.reply_text("Pls send live location")
         return LOCATION
-    
+
     else:
         #Calculation for distance between two points
         R = 6373.0
@@ -164,7 +164,7 @@ def authenticateLocation(update, context):
         c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
         distance = R * c
-  
+
     #Checking distance
     if distance>0.2:
         update.message.reply_text("Too far from camp, move closer and resend your location")
@@ -230,7 +230,7 @@ def viewUserHistory(update, context):
         args = (update.message.chat_id,)
         asd = execute_sql(conn, sql, args).fetchone()
         if(asd[0] == 1):
-    
+
             sql_1 = 'SELECT telegram_id FROM user WHERE full_name = (?)'
             args_1=""
             for i in range(len(context.args)):
@@ -241,7 +241,7 @@ def viewUserHistory(update, context):
         else:
             update.message.reply_text("You are not an admin")
             return ConversationHandler.END
-        
+
     sql = 'SELECT time_in, time_out FROM timesheet WHERE telegram_id = (?)'
     args = (telegram_id,)
     results = execute_sql(conn, sql, args).fetchall()
@@ -260,27 +260,28 @@ def viewInCampMsg(update, context):
 def viewInCamp(update, context):
     conn = connect_database(databasePath)
     company_name = update.message.text
-    sql_1 = 'SELECT id FROM company WHERE name = (?)'
+    sql = 'SELECT id FROM company WHERE name = (?)'
     args = (company_name,)
-    results = execute_sql(conn, sql_1, args).fetchall() 
+    results = execute_sql(conn, sql, args).fetchone()
     if(len(results) == 0):
         update.message.reply_text("Company/Battery does not exist")
         return ConversationHandler.END
-    sql = """
-            SELECT 
-                user.full_name 
-            FROM 
-                (SELECT telegram_id AS t_id, max(id) AS max_id, time_out AS out FROM timesheet GROUP BY telegram_id) 
-            JOIN 
-                user ON user.telegram_id = t_id
-            WHERE out IS NULL
+    sql_1 = """
+            SELECT
+                user.full_name, user.company_id
+            FROM
+                (SELECT telegram_id AS t_id, max(id) AS max_id, time_out AS out FROM timesheet GROUP BY telegram_id)
+            INNER JOIN
+                user ON (user.telegram_id = t_id)
+            WHERE out IS NULL AND user.company_id = (?)
         """
-    results = execute_sql(conn, sql, ()).fetchall()
+    args_1 = (results[0],)
+    results = execute_sql(conn, sql_1, args_1).fetchall()
     if (len(results) == 0):
         update.message.reply_text("No one in camp")
     else:
         text = ""
-        for index, user in enumerate(results, start=1):    
+        for index, user in enumerate(results, start=1):
             text = text + str(index) + ". " + user[0] + "\n"
         update.message.reply_text(text)
 
@@ -304,8 +305,8 @@ def viewDateHistory(update, context):
     results = execute_sql(conn, sql, args).fetchall()
     if(results):
         text = ""
-        for row in results:
-            text = text + row[0] + "\nIn: " + datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[2]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[2], str) else "\n\n")
+        for index, row in enumerate(results, start=1):
+            text = text + str(index) + ". " + row[0] + "\nIn: " + datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[2]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[2], str) else "\n\n")
         context.bot.send_message(chat_id=update.callback_query.from_user.id, text=text)
 
 def cancel(update, context):
