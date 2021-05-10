@@ -67,6 +67,16 @@ def help(update, context):
         '   /viewInCamp\n'
     )
 
+"""def user_restricted(func):
+    @wraps(func)
+    def wrapped(update, context, *args, **kwargs):
+        #Check if user created
+        if user_id not in conf['restricted_ids']:
+            update.message.reply_text('Create user with /join first')
+            return
+        return func(bot, update, *args, **kwargs)
+    return wrapped"""
+
 def saveUserName(update, context):
     if "indatabase" in context.user_data:
         update.message.reply_text("You are already in the database. You will now edit your details.")
@@ -167,6 +177,7 @@ def authenticateLocation(update, context):
     #Checking distance
     if distance>0.2:
         update.message.reply_text("Too far from camp, move closer and resend your location")
+        context.bot.deleteMessage(chat_id=update.message.chat_id, message_id=update.message.message_id)
         return LOCATION
     else:
         conn = connect_database(databasePath)
@@ -174,7 +185,8 @@ def authenticateLocation(update, context):
         sql = 'INSERT INTO timesheet (telegram_id, time_in) VALUES (?,?)'
         args = (update.message.chat_id, datetime.now())
         execute_sql(conn, sql, args)
-        update.message.reply_text("You have booked in")
+        update.message.reply_text("You have booked in.")
+        context.bot.deleteMessage(chat_id=update.message.chat_id, message_id=update.message.message_id)
         return ConversationHandler.END
 
 def testbookIn(update, context):
