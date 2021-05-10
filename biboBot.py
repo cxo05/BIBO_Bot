@@ -145,9 +145,8 @@ def authenticateLocation(update, context):
     live_period=local.live_period
 
     if live_period==None:
-        update.message.reply_text("Pls send live location")
+        update.message.reply_text("Send live location: ")
         return LOCATION
-
     else:
         #Calculation for distance between two points
         R = 6373.0
@@ -176,6 +175,7 @@ def authenticateLocation(update, context):
         args = (update.message.chat_id, datetime.now())
         execute_sql(conn, sql, args)
         update.message.reply_text("You have booked in")
+        return ConversationHandler.END
 
 def testbookIn(update, context):
     conn = connect_database(databasePath)
@@ -186,8 +186,7 @@ def testbookIn(update, context):
     update.message.reply_text("You have booked in")
 
 def bookIn(update, context):
-    keyboard = [[KeyboardButton("Current Location", request_location=True)]]
-    update.message.reply_text("Send your location: ", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
+    update.message.reply_text("Send your live location: ")
     return LOCATION
 
 def bookOut(update, context):
