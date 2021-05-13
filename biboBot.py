@@ -4,6 +4,7 @@ load_dotenv()
 import os
 botKey = os.environ.get("bot_key") #Create a .env file in root folder with bot_key=INSERTKEYHERE
 databasePath = os.environ.get("databasePath") #Create new line with databasePath=INSERTDATABASEPATHHERE
+from functools import wraps
 import sqlite3
 import logging
 from sqlite3 import Error
@@ -67,21 +68,27 @@ def help(update, context):
         '   /viewInCamp\n'
     )
 
-"""def user_restricted(func):
+def user_restricted(func):
     @wraps(func)
     def wrapped(update, context, *args, **kwargs):
-        #Check if user created
-        if user_id not in conf['restricted_ids']:
+        if "indatabase" not in context.user_data:
             update.message.reply_text('Create user with /join first')
             return
-        return func(bot, update, *args, **kwargs)
-    return wrapped"""
+        return func(update, context, *args, **kwargs)
+    return wrapped
+
+def admin_restricted(func):
+    @wraps(func)
+    def wrapped(update, context, *args, **kwargs):
+        if "isadmin" not in context.user_data or context.user_data["isadmin"] == False:
+            update.message.reply_text('You are not an admin')
+            return
+        return func(update, context, *args, **kwargs)
+    return wrapped
 
 def saveUserName(update, context):
     if "indatabase" in context.user_data:
-        update.message.reply_text("You are already in the database. You will now edit your details.")
-    else:
-        context.user_data["indatabase"] = False
+        update.message.reply_text("You are already registered. You will now edit your details.")
     update.message.reply_text("Enter your name")
     return SAVE_NAME
 
@@ -95,12 +102,12 @@ def addUser(update, context):
     telegram_id = update.message.chat_id
     sql = 'INSERT INTO user (full_name,company_id, telegram_id) VALUES (?, (SELECT id from company WHERE name = (?)), ?)'
     args = (context.user_data["name"], update.message.text, telegram_id)
-    if(context.user_data["indatabase"]):
+    if("indatabase" in context.user_data):
         sql = 'UPDATE user SET full_name = (?), company_id = (SELECT id from company WHERE name = (?)) WHERE telegram_id = (?)'
     try:
         execute_sql(conn, sql, args)
     except Error as e:
-        update.message.reply_text("Company does not exist")
+        update.message.reply_text("Error occurred")
     else:
         update.message.reply_text(context.user_data["name"] + " has been added to " + update.message.text)
         context.user_data["indatabase"] = True
@@ -109,25 +116,15 @@ def addUser(update, context):
 def setAdmin(update, context):
     if(context.args[0] == "password"):
         telegram_id = update.message.chat_id
-        conn = connect_database(databasePath)
-        sql = 'UPDATE user SET isAdmin = 1 WHERE telegram_id = (?)'
-        args = (telegram_id,)
-        execute_sql(conn, sql, args)
+        context.user_data["isadmin"] = True
         update.message.reply_text("You are now an admin")
     else:
         update.message.reply_text("Wrong password")
 
+@admin_restricted
 def addCompanyMsg(update, context):
-    conn = connect_database(databasePath)
-    sql = 'SELECT isAdmin FROM user WHERE telegram_id = (?)'
-    args = (update.message.chat_id,)
-    asd = execute_sql(conn, sql, args).fetchall()
-    if(len(asd) == 0):
-        update.message.reply_text("Enter company/battery name")
-        return ADD_COMPANY
-    else:
-        update.message.reply_text("You are not an admin")
-        return ConversationHandler.END
+    update.message.reply_text("Enter company/battery name")
+    return ADD_COMPANY
 
 def addCompany(update,context):
     conn = connect_database(databasePath)
@@ -142,6 +139,7 @@ def addCompany(update,context):
         update.message.reply_text("Added " + company_name + " to the database")
     return ConversationHandler.END
 
+@user_restricted
 def InOutButton(update, context):
     keyboard = [['Book In', 'Book Out']]
     update.message.reply_text('Select Option:', reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
@@ -211,6 +209,7 @@ def bookOut(update, context):
     else:
         update.message.reply_text("You have not booked in")
 
+@user_restricted
 def getUsersMsg(update, context):
     update.message.reply_text("Enter company/battery name")
     return GET_USERS
@@ -229,9 +228,10 @@ def getUsers(update, context):
             text = text + str(x) + ". " + str(row[0]) + "\n"
         update.message.reply_text(text)
     else:
-        update.message.reply_text("Company/Battery does not exist")
+        update.message.reply_text("Company does not exist or is empty")
     return ConversationHandler.END
 
+@user_restricted
 def viewUserHistory(update, context):
     telegram_id = update.message.chat_id
     conn = connect_database(databasePath)
@@ -264,6 +264,7 @@ def viewUserHistory(update, context):
         update.message.reply_text(text)
     return ConversationHandler.END
 
+@user_restricted
 def viewInCampMsg(update, context):
     update.message.reply_text("Enter company/battery name")
     return VIEW_IN_CAMP
@@ -297,9 +298,11 @@ def viewInCamp(update, context):
             text = text + str(index) + ". " + user[0] + "\n"
         update.message.reply_text(text)
 
+@user_restricted
 def getDate(update, context):
     update.message.reply_text("Please select a date: ", reply_markup=telegramcalendar.create_calendar())
 
+@user_restricted
 def viewDateHistory(update, context):
     selected,date = telegramcalendar.process_calendar_selection(update, context)
     if selected:
@@ -337,7 +340,6 @@ if __name__=="__main__":
     sql_create_user_table = """CREATE TABLE IF NOT EXISTS user (
                                     telegram_id integer PRIMARY KEY,
                                     full_name text UNIQUE NOT NULL,
-                                    isAdmin integer DEFAULT 0,
                                     company_id integer NOT NULL,
                                     FOREIGN KEY (company_id) REFERENCES company (id)
                                 );"""
