@@ -11,12 +11,13 @@ from sqlite3 import Error
 from telegram.ext import (
     Updater,
     CommandHandler,
+    CallbackContext,
     CallbackQueryHandler,
     ConversationHandler,
     MessageHandler,
     Filters
 )
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 import telegramcalendar
@@ -25,7 +26,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 logger = logging.getLogger(__name__)
 
-SAVE_NAME, SAVE_COMPANY, ADD_COMPANY, GET_USERS, VIEW_IN_CAMP, BIBO, LOCATION = range(7)
+SAVE_NAME, SAVE_COMPANY, ADD_COMPANY, GET_USERS, VIEW_IN_CAMP, BIBO, LOCATION, VIEW_DATE_HISTORY = range(8)
 
 def connect_database(file):
     #Connect to database
@@ -48,43 +49,60 @@ def execute_sql(conn, sql, args=None):
         logger.exception("message")
 
 def help(update, context):
+    keyboard = [
+        [InlineKeyboardButton("Book In", callback_data='Book In')],
+        [InlineKeyboardButton("Book Out", callback_data='Book Out')],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     context.bot.send_message(
         update.effective_chat.id,
         '1) To join/update your name and company/battery.\n' +
         '   /join\n' +
-        '2) To create a company/battery.\n' +
-        '   /create_company\n' +
-        '3) To book in or out\n' +
-        '   /bookInOut\n' +
-        '4) Show users\n' +
+        '2) Show users\n' +
         '   /getUsers\n' +
-        '5) View your history\n' +
+        '3) View your history\n' +
         '   /viewHistory\n'+
-        '6) View others history\n' +
+        '4) View others history\n' +
         '   /viewHistory NAME\n' +
-        '7) View particular date\n' +
-        '   /viewDateHistory\n'
-        '8) View people in camp\n' +
-        '   /viewInCamp\n'
+        '5) View particular date\n' +
+        '   /viewDateHistory\n' +
+        '6) View people in camp\n' +
+        '   /viewInCamp\n'+
+        '7) /adminHelp'
+        , reply_markup=reply_markup
     )
-
-def user_restricted(func):
-    @wraps(func)
-    def wrapped(update, context, *args, **kwargs):
-        if "indatabase" not in context.user_data:
-            update.message.reply_text('Create user with /join first')
-            return
-        return func(update, context, *args, **kwargs)
-    return wrapped
+    return BIBO
 
 def admin_restricted(func):
     @wraps(func)
     def wrapped(update, context, *args, **kwargs):
         if "isadmin" not in context.user_data or context.user_data["isadmin"] == False:
-            update.message.reply_text('You are not an admin')
+            context.bot.send_message(update.effective_chat.id, 'You are not an admin')
             return
         return func(update, context, *args, **kwargs)
     return wrapped
+
+@admin_restricted
+def adminHelp(update, context):
+    context.bot.send_message(
+    update.effective_chat.id,
+        '1) To create a company/battery.\n' +
+        '   /create_company\n'
+    )
+
+# def user_restricted(func):
+#     @wraps(func)
+#     def wrapped(update, context, *args, **kwargs):
+#         conn = connect_database(databasePath)
+#         sql = 'SELECT EXISTS(SELECT 1 FROM user WHERE telegram_id=(?))'
+#         args = (update.effective_chat.id,)
+#         result = execute_sql(conn, sql, args).fetchone()
+#         if result==0:
+#             context.bot.send_message(update.effective_chat.id, 'Create user with /join first')
+#             return
+#         return func(CallbackContext, *args, **kwargs)
+#     return wrapped
 
 def saveUserName(update, context):
     if "indatabase" in context.user_data:
@@ -139,12 +157,6 @@ def addCompany(update,context):
         update.message.reply_text("Added " + company_name + " to the database")
     return ConversationHandler.END
 
-@user_restricted
-def InOutButton(update, context):
-    keyboard = [['Book In', 'Book Out']]
-    update.message.reply_text('Select Option:', reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
-    return BIBO
-
 def authenticateLocation(update, context):
     local = update.message.location
     logger.info(
@@ -196,20 +208,19 @@ def testbookIn(update, context):
     update.message.reply_text("You have booked in")
 
 def bookIn(update, context):
-    update.message.reply_text("Send your live location: ")
+    context.bot.send_message(update.effective_chat.id, "Send your live location: ")
     return LOCATION
 
 def bookOut(update, context):
     conn = connect_database(databasePath)
     sql = 'UPDATE timesheet SET time_out = (?) WHERE id = (SELECT id FROM timesheet WHERE telegram_id = (?) ORDER BY time_in DESC LIMIT 1) AND time_out IS NULL'
-    args = (datetime.now(), update.message.chat_id)
+    args = (datetime.now(), update.effective_chat.id)
     result = execute_sql(conn, sql, args)
     if(result.rowcount == 1):
-        update.message.reply_text("You have booked out")
+        context.bot.send_message(update.effective_chat.id, "You have booked out")
     else:
-        update.message.reply_text("You have not booked in")
+        context.bot.send_message(update.effective_chat.id, "You have not booked in")
 
-@user_restricted
 def getUsersMsg(update, context):
     update.message.reply_text("Enter company/battery name")
     return GET_USERS
@@ -231,7 +242,6 @@ def getUsers(update, context):
         update.message.reply_text("Company does not exist or is empty")
     return ConversationHandler.END
 
-@user_restricted
 def viewUserHistory(update, context):
     telegram_id = update.message.chat_id
     conn = connect_database(databasePath)
@@ -264,7 +274,6 @@ def viewUserHistory(update, context):
         update.message.reply_text(text)
     return ConversationHandler.END
 
-@user_restricted
 def viewInCampMsg(update, context):
     update.message.reply_text("Enter company/battery name")
     return VIEW_IN_CAMP
@@ -298,11 +307,10 @@ def viewInCamp(update, context):
             text = text + str(index) + ". " + user[0] + "\n"
         update.message.reply_text(text)
 
-@user_restricted
 def getDate(update, context):
     update.message.reply_text("Please select a date: ", reply_markup=telegramcalendar.create_calendar())
+    return VIEW_DATE_HISTORY
 
-@user_restricted
 def viewDateHistory(update, context):
     selected,date = telegramcalendar.process_calendar_selection(update, context)
     if selected:
@@ -327,9 +335,6 @@ def viewDateHistory(update, context):
 def cancel(update, context):
     update.message.reply_text('Current operation canceled')
     return ConversationHandler.END
-
-def error_handler(update, context):
-    logger.warning('Update "%s" caused error "%s"', update, context.error)
 
 if __name__=="__main__":
     sql_create_company_table = """CREATE TABLE IF NOT EXISTS company (
@@ -370,19 +375,20 @@ if __name__=="__main__":
 
     #adding handlers to telegram bot
     dispatcher=updater.dispatcher
-    dispatcher.add_handler(CommandHandler("start", help))
-    dispatcher.add_handler(CommandHandler("help", help))
     dispatcher.add_handler(CommandHandler("setAdmin", setAdmin))
+    dispatcher.add_handler(CommandHandler("adminHelp", adminHelp))
     dispatcher.add_handler(CommandHandler("viewHistory", viewUserHistory))
-    dispatcher.add_handler(CommandHandler("viewDateHistory", getDate))
-    dispatcher.add_handler(CallbackQueryHandler(viewDateHistory))
     conv_handler = ConversationHandler(
         entry_points=[
+            CommandHandler("start", help),
+            CommandHandler("help", help),
             CommandHandler("create_company", addCompanyMsg),
-            CommandHandler("bookInOut", InOutButton),
             CommandHandler("join", saveUserName),
             CommandHandler("getUsers", getUsersMsg),
-            CommandHandler("viewInCamp", viewInCampMsg)
+            CommandHandler("viewInCamp", viewInCampMsg),
+            CommandHandler("viewDateHistory", getDate),
+            CallbackQueryHandler(bookIn, pattern='^(Book In)$'),
+            CallbackQueryHandler(bookOut, pattern='^(Book Out)$'),
         ],
         states={
             SAVE_NAME:[
@@ -400,22 +406,22 @@ if __name__=="__main__":
             VIEW_IN_CAMP: [
                 MessageHandler(Filters.text & ~Filters.command, viewInCamp),
             ],
+            VIEW_DATE_HISTORY: [
+                CallbackQueryHandler(viewDateHistory)
+            ],
             BIBO: [
-                MessageHandler(Filters.regex('^(Book In)$'), bookIn),
-                MessageHandler(Filters.regex('^(Book Out)$'), bookOut),
+                CallbackQueryHandler(bookIn, pattern='^(Book In)$'),
+                CallbackQueryHandler(bookOut, pattern='^(Book Out)$'),
             ],
             LOCATION: [
                 MessageHandler(Filters.location, authenticateLocation),
                 MessageHandler(Filters.regex('^(pass)$'), testbookIn),
             ],
         },
-        fallbacks=[
-            MessageHandler(Filters.text & ~Filters.command, cancel),
-        ],
+        fallbacks=[CommandHandler('start', help)],
         allow_reentry=True
     )
     dispatcher.add_handler(conv_handler)
-    dispatcher.add_error_handler(error_handler)
 
     #start telegram bot
     updater.start_polling()
