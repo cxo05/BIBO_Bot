@@ -91,18 +91,18 @@ def adminHelp(update, context):
         '   /create_company\n'
     )
 
-# def user_restricted(func):
-#     @wraps(func)
-#     def wrapped(update, context, *args, **kwargs):
-#         conn = connect_database(databasePath)
-#         sql = 'SELECT EXISTS(SELECT 1 FROM user WHERE telegram_id=(?))'
-#         args = (update.effective_chat.id,)
-#         result = execute_sql(conn, sql, args).fetchone()
-#         if result==0:
-#             context.bot.send_message(update.effective_chat.id, 'Create user with /join first')
-#             return
-#         return func(CallbackContext, *args, **kwargs)
-#     return wrapped
+def user_restricted(func):
+    @wraps(func)
+    def wrapped(update, context):
+        conn = connect_database(databasePath)
+        sql = 'SELECT EXISTS(SELECT 1 FROM user WHERE telegram_id=(?))'
+        args = (update.effective_chat.id,)
+        result = execute_sql(conn, sql, args).fetchone()
+        if result==0:
+            context.bot.send_message(update.effective_chat.id, 'Create user with /join first')
+            return
+        return func(update, context)
+    return wrapped
 
 def saveUserName(update, context):
     if "indatabase" in context.user_data:
@@ -207,43 +207,23 @@ def testbookIn(update, context):
     execute_sql(conn, sql, args)
     update.message.reply_text("You have booked in")
 
+@user_restricted
 def bookIn(update, context):
-<<<<<<< HEAD
     context.bot.send_message(update.effective_chat.id, "Send your live location: ")
-=======
-    conn = connect_database(databasePath)
-    sql = 'SELECT telegram_id FROM user WHERE telegram_id=(?)'
-    args=(update.message.chat_id,)
-    y=execute_sql(conn,sql,args).fetchall()
-    if len(y)==0:
-        update.message.reply_text("You are not in the database. Pls register using /join")
-    return conversationhandler.END
-    update.message.reply_text("Send your live location: ")
->>>>>>> 77a3cd350facefbfc443eb0e2dba46fd46fc3b9c
     return LOCATION
 
+@user_restricted
 def bookOut(update, context):
     conn = connect_database(databasePath)
-<<<<<<< HEAD
     sql = 'UPDATE timesheet SET time_out = (?) WHERE id = (SELECT id FROM timesheet WHERE telegram_id = (?) ORDER BY time_in DESC LIMIT 1) AND time_out IS NULL'
     args = (datetime.now(), update.effective_chat.id)
     result = execute_sql(conn, sql, args)
-=======
-    sql = 'SELECT telegram_id FROM user WHERE telegram_id=(?)'
-    args=(update.message.chat_id,)
-    y=execute_sql(conn,sql,args).fetchall()
-    if len(y)==0:
-        update.message.reply_text("You are not in the database. Pls register using /join")
-    else:
-        sql = 'UPDATE timesheet SET time_out = (?) WHERE id = (SELECT id FROM timesheet WHERE telegram_id = (?) ORDER BY time_in DESC LIMIT 1) AND time_out IS NULL'
-        args = (datetime.now(), update.message.chat_id)
-        result = execute_sql(conn, sql, args)
->>>>>>> 77a3cd350facefbfc443eb0e2dba46fd46fc3b9c
     if(result.rowcount == 1):
         context.bot.send_message(update.effective_chat.id, "You have booked out")
     else:
         context.bot.send_message(update.effective_chat.id, "You have not booked in")
 
+@user_restricted
 def getUsersMsg(update, context):
     update.message.reply_text("Enter company/battery name")
     return GET_USERS
@@ -297,6 +277,7 @@ def viewUserHistory(update, context):
         update.message.reply_text(text)
     return ConversationHandler.END
 
+@user_restricted
 def viewInCampMsg(update, context):
     update.message.reply_text("Enter company/battery name")
     return VIEW_IN_CAMP
@@ -330,6 +311,7 @@ def viewInCamp(update, context):
             text = text + str(index) + ". " + user[0] + "\n"
         update.message.reply_text(text)
 
+@user_restricted
 def getDate(update, context):
     update.message.reply_text("Please select a date: ", reply_markup=telegramcalendar.create_calendar())
     return VIEW_DATE_HISTORY
