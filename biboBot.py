@@ -11,13 +11,12 @@ from sqlite3 import Error
 from telegram.ext import (
     Updater,
     CommandHandler,
-    CallbackContext,
     CallbackQueryHandler,
     ConversationHandler,
     MessageHandler,
     Filters
 )
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from math import sin, cos, sqrt, atan2, radians
 from datetime import datetime
 import telegramcalendar
@@ -288,7 +287,7 @@ def viewInCamp(update, context):
     sql = 'SELECT id FROM company WHERE name = (?)'
     args = (company_name,)
     results = execute_sql(conn, sql, args).fetchone()
-    if(len(results) == 0):
+    if results is None:
         update.message.reply_text("Company/Battery does not exist")
         return ConversationHandler.END
     sql_1 = """
