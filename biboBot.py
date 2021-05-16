@@ -196,14 +196,27 @@ def testbookIn(update, context):
     update.message.reply_text("You have booked in")
 
 def bookIn(update, context):
+    conn = connect_database(databasePath)
+    sql = 'SELECT telegram_id FROM user WHERE telegram_id=(?)'
+    args=(update.message.chat_id,)
+    y=execute_sql(conn,sql,args).fetchall()
+    if len(y)==0:
+        update.message.reply_text("You are not in the database. Pls register using /join")
+    return conversationhandler.END
     update.message.reply_text("Send your live location: ")
     return LOCATION
 
 def bookOut(update, context):
     conn = connect_database(databasePath)
-    sql = 'UPDATE timesheet SET time_out = (?) WHERE id = (SELECT id FROM timesheet WHERE telegram_id = (?) ORDER BY time_in DESC LIMIT 1) AND time_out IS NULL'
-    args = (datetime.now(), update.message.chat_id)
-    result = execute_sql(conn, sql, args)
+    sql = 'SELECT telegram_id FROM user WHERE telegram_id=(?)'
+    args=(update.message.chat_id,)
+    y=execute_sql(conn,sql,args).fetchall()
+    if len(y)==0:
+        update.message.reply_text("You are not in the database. Pls register using /join")
+    else:
+        sql = 'UPDATE timesheet SET time_out = (?) WHERE id = (SELECT id FROM timesheet WHERE telegram_id = (?) ORDER BY time_in DESC LIMIT 1) AND time_out IS NULL'
+        args = (datetime.now(), update.message.chat_id)
+        result = execute_sql(conn, sql, args)
     if(result.rowcount == 1):
         update.message.reply_text("You have booked out")
     else:
