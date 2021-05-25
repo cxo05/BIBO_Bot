@@ -25,7 +25,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 logger = logging.getLogger(__name__)
 
-SAVE_NAME, SAVE_COMPANY, ADD_COMPANY, GET_USERS, VIEW_IN_CAMP, BIBO, LOCATION, VIEW_DATE_HISTORY = range(8)
+SAVE_NAME, SAVE_COMPANY, ADD_COMPANY, GET_USERS, VIEW_IN_CAMP, BIBO, LOCATION, VIEW_DATE_HISTORY, RESET = range(9)
 
 def connect_database(file):
     #Connect to database
@@ -45,7 +45,7 @@ def execute_sql(conn, sql, args=None):
         conn.commit()
         return c
     except Error:
-        logger.exception("message")
+        raise
 
 def help(update, context):
     keyboard = [
@@ -68,7 +68,9 @@ def help(update, context):
         '   /viewDateHistory\n' +
         '6) View people in camp\n' +
         '   /viewInCamp\n'+
-        '7) /adminHelp'
+        #'7) Reset your data\n' +
+        #'   /reset\n'+
+        '8) /adminHelp'
         , reply_markup=reply_markup
     )
     return BIBO
@@ -96,15 +98,24 @@ def user_restricted(func):
         conn = connect_database(databasePath)
         sql = 'SELECT EXISTS(SELECT 1 FROM user WHERE telegram_id=(?))'
         args = (update.effective_chat.id,)
-        result = execute_sql(conn, sql, args).fetchone()
+        result = execute_sql(conn, sql, args).fetchone()[0]
         if result==0:
             context.bot.send_message(update.effective_chat.id, 'Create user with /join first')
             return
         return func(update, context)
     return wrapped
 
+def isUser(update, context):
+    conn = connect_database(databasePath)
+    sql = 'SELECT EXISTS(SELECT 1 FROM user WHERE telegram_id=(?))'
+    args = (update.effective_chat.id,)
+    result = execute_sql(conn, sql, args).fetchone()[0]
+    if result==0:
+        return False
+    return True
+
 def saveUserName(update, context):
-    if "indatabase" in context.user_data:
+    if isUser(update, context):
         update.message.reply_text("You are already registered. You will now edit your details.")
     update.message.reply_text("Enter your name")
     return SAVE_NAME
@@ -119,16 +130,25 @@ def addUser(update, context):
     telegram_id = update.message.chat_id
     sql = 'INSERT INTO user (full_name,company_id, telegram_id) VALUES (?, (SELECT id from company WHERE name = (?)), ?)'
     args = (context.user_data["name"], update.message.text, telegram_id)
-    if("indatabase" in context.user_data):
+    if isUser(update, context):
         sql = 'UPDATE user SET full_name = (?), company_id = (SELECT id from company WHERE name = (?)) WHERE telegram_id = (?)'
-    try:
-        execute_sql(conn, sql, args)
-    except Error as e:
-        update.message.reply_text("Error occurred")
+        try:
+            execute_sql(conn, sql, args)
+        except Error:
+            update.message.reply_text("Company does not exist")
+        else:
+            update.message.reply_text("Your details have been changed")
+        finally:
+            return ConversationHandler.END
     else:
-        update.message.reply_text(context.user_data["name"] + " has been added to " + update.message.text)
-        context.user_data["indatabase"] = True
-    return ConversationHandler.END
+        try:
+            execute_sql(conn, sql, args)
+        except Error:
+            update.message.reply_text("Error occurred")
+        else:
+            update.message.reply_text(context.user_data["name"] + " has been added to " + update.message.text)
+        finally:
+            return ConversationHandler.END
 
 def setAdmin(update, context):
     if(context.args[0] == "password"):
@@ -244,6 +264,7 @@ def getUsers(update, context):
         update.message.reply_text("Company does not exist or is empty")
     return ConversationHandler.END
 
+@user_restricted
 def viewUserHistory(update, context):
     telegram_id = update.message.chat_id
     conn = connect_database(databasePath)
@@ -336,6 +357,26 @@ def viewDateHistory(update, context):
             text = text + str(index) + ". " + row[0] + "\nIn: " + datetime.fromisoformat(row[1]).strftime("%d-%m-%Y %H%M") + "hrs\n" + "Out: " + (datetime.fromisoformat(row[2]).strftime("%d-%m-%Y %H%M") + "hrs \n\n" if isinstance(row[2], str) else "\n\n")
         context.bot.send_message(chat_id=update.callback_query.from_user.id, text=text)
 
+@user_restricted
+def resetMsg(update, context):
+    update.message.reply_text("WARNING: Your data and history will be deleted. Continue? (Y/N)")
+    return RESET
+
+def reset(update, context):
+    conn = connect_database(databasePath)
+    args = (update.message.chat_id,)
+    sql = 'DELETE FROM user WHERE telegram_id = (?)'
+    sql_1 = 'DELETE FROM timesheet WHERE telegram_id = (?)'
+    try:
+        execute_sql(conn, sql_1, args)
+        execute_sql(conn, sql, args)
+    except Error:
+        update.message.reply_text("Error occurred")
+    else:
+        update.message.reply_text("User data deleted")
+    finally:
+        return ConversationHandler.END
+
 def cancel(update, context):
     update.message.reply_text('Current operation canceled')
     return ConversationHandler.END
@@ -391,6 +432,7 @@ if __name__=="__main__":
             CommandHandler("getUsers", getUsersMsg),
             CommandHandler("viewInCamp", viewInCampMsg),
             CommandHandler("viewDateHistory", getDate),
+            CommandHandler("reset", resetMsg),
             CallbackQueryHandler(bookIn, pattern='^(Book In)$'),
             CallbackQueryHandler(bookOut, pattern='^(Book Out)$'),
         ],
@@ -420,6 +462,10 @@ if __name__=="__main__":
             LOCATION: [
                 MessageHandler(Filters.location, authenticateLocation),
                 MessageHandler(Filters.regex('^(pass)$'), testbookIn),
+            ],
+            RESET: [
+                MessageHandler(Filters.regex('^Y$'), reset),
+                MessageHandler(Filters.text & ~Filters.command, cancel),
             ],
         },
         fallbacks=[CommandHandler('start', help)],
